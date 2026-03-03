@@ -1,0 +1,15 @@
+package config
+
+type WebCmd struct {
+    DatabaseUsername   string `koanf:"DATABASE_USERNAME" required:"true"`
+	DatabasePassword   string `koanf:"DATABASE_PASSWORD" required:"true"`
+	DatabaseEndpoint   string `koanf:"DATABASE_ENDPOINT" required:"true"`
+	DatabasePort       string `koanf:"DATABASE_PORT" required:"true"`
+	DatabaseName       string `koanf:"DATABASE_NAME" required:"true"`
+	HTTPPort           string `koanf:"HTTP_PORT" default:"8080"`
+	MetricsHTTPPort    string `koanf:"METRICS_HTTP_PORT" default:"9090"`
+	LogLevel           string `koanf:"LOG_LEVEL" default:"info"`
+	TracerServiceName  string `koanf:"TRACER_SERVICE_NAME" required:"true"`
+	SettingsServiceURI string `koanf:"SETTINGS_SERVICE_URI" required:"true"`
+	SensitiveFields    string `koanf:"SENSITIVE_FIELDS" default:"{}"`
+}

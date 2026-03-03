@@ -1,0 +1,55 @@
+package handler
+
+import (
+	"context"
+	"fmt"
+
+	"bitbucket.org/csgot/helis-messagebus-go/v2/pkg/messagebus"
+	"{{.ModuleName}}/internal/messagebus/event"
+	"github.com/sirupsen/logrus"
+)
+
+type (
+	storage interface {
+		Ping() error
+	}
+
+	settingsRouter interface {
+		GetBool(settingName string, defaultVal bool) bool
+	}
+
+	GreetingEventHandler struct {
+		messagebus.SingleTypeAwareHandler
+		storage        storage
+		settingsRouter settingsRouter
+		logger         *logrus.Logger
+	}
+
+	GreetingEventHandlerConfig struct {
+		Storage        storage
+		SettingsRouter settingsRouter
+		Logger         *logrus.Logger
+	}
+)
+
+func NewGreeting(c *GreetingEventHandlerConfig) *GreetingEventHandler {
+	return &GreetingEventHandler{
+		SingleTypeAwareHandler: messagebus.SingleTypeAwareHandler{
+			Type: event.GreetingEventType,
+		},
+		storage:        c.Storage,
+		settingsRouter: c.SettingsRouter,
+		logger:         c.Logger,
+	}
+}
+
+func (h *GreetingEventHandler) Handle(ctx context.Context, msg *messagebus.Message) error {
+	greetingEvent, ok := msg.Envelope.(*event.GreetingEvent)
+	if !ok {
+		return fmt.Errorf("unable to cast envelope into %s struct", h.MessageType())
+	}
+
+	h.logger.WithContext(ctx).Info(greetingEvent.Message)
+
+	return nil
+}

@@ -1,0 +1,20 @@
+package types
+
+import "github.com/graphql-go/graphql"
+
+var ContextInput = graphql.NewInputObject(
+	graphql.InputObjectConfig{
+		Name: "ContextInput",
+		Fields: graphql.InputObjectConfigFieldMap{
+			"country": &graphql.InputObjectFieldConfig{
+				Type: graphql.String,
+			},
+			"language": &graphql.InputObjectFieldConfig{
+				Type: graphql.String,
+			},
+			"region": &graphql.InputObjectFieldConfig{
+				Type: graphql.String,
+			},
+		},
+	},
+)

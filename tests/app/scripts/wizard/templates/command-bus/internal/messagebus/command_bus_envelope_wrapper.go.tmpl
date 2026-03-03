@@ -1,0 +1,33 @@
+package messagebus
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"{{.ModuleName}}/internal/messagebus/command"
+	"bitbucket.org/csgot/helis-enq2bus-go/pkg/enq2bus"
+)
+
+type CommandBusEnvelopeWrapper struct{}
+
+func NewCommandBusEnvelopeWrapper() *CommandBusEnvelopeWrapper {
+	return &CommandBusEnvelopeWrapper{}
+}
+
+func (w *CommandBusEnvelopeWrapper) Unwrap(envelope *enq2bus.Envelope) (interface{}, error) {
+	var serializedMessage interface{}
+
+	switch envelope.Type {
+	case command.GreetingCommandType:
+		serializedMessage = &command.GreetingCommand{}
+	// TODO: add commands
+	default:
+		return nil, fmt.Errorf("unsupported command type %s", envelope.Type)
+	}
+
+	if err := json.Unmarshal([]byte(envelope.SerializedMessage), &serializedMessage); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal %s into struct: %w", envelope.Type, err)
+	}
+
+	return serializedMessage, nil
+}

@@ -1,0 +1,67 @@
+package gql
+
+import (
+	"context"
+	"fmt"
+
+	"{{.ModuleName}}/internal/model/input"
+	"{{.ModuleName}}/internal/model/response"
+	"github.com/graphql-go/graphql"
+	"github.com/mitchellh/mapstructure"
+	"github.com/sirupsen/logrus"
+)
+
+type (
+	validator interface {
+		StructCtx(ctx context.Context, s interface{}) error
+	}
+
+	Resolver struct {
+		validator validator
+		logger    *logrus.Logger
+	}
+
+	ResolverConfig struct {
+		Validator validator
+		Logger    *logrus.Logger
+	}
+)
+
+func NewResolver(c *ResolverConfig) *Resolver {
+	return &Resolver{
+		validator: c.Validator,
+		logger:    c.Logger,
+	}
+}
+
+//nolint:gocritic
+func (r *Resolver) Greeting(params graphql.ResolveParams) (interface{}, error) {
+	return &response.Greeting{
+		Message: "Hello there!",
+	}, nil
+}
+
+//nolint:gocritic
+func (r *Resolver) UpdateGreeting(params graphql.ResolveParams) (interface{}, error) {
+	greetingInput := &input.Greeting{}
+	if err := r.decodeInputArgs(params.Args, greetingInput); err != nil {
+		return false, fmt.Errorf("failed to decode greeting input args: %w", err)
+	}
+
+	if err := r.validator.StructCtx(params.Context, greetingInput); err != nil {
+		return nil, fmt.Errorf("invalid input: %w", err)
+	}
+
+	return &response.UpdateGreeting{
+		Success: true,
+		Message: fmt.Sprintf("Hello, %s!", greetingInput.Name),
+	}, nil
+}
+
+func (r *Resolver) decodeInputArgs(args map[string]interface{}, target interface{}) error {
+	if err := mapstructure.Decode(args["input"], target); err != nil {
+		return fmt.Errorf("failed to marshal args into target struct: %w", err)
+	}
+
+	return nil
+}

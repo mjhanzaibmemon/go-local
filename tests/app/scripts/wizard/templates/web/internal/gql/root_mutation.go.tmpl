@@ -1,0 +1,23 @@
+package gql
+
+import (
+    "{{.ModuleName}}/internal/gql/types"
+	"github.com/graphql-go/graphql"
+)
+
+func rootMutation(gqlResolver *Resolver) *graphql.Object {
+	fields := graphql.Fields{
+		MutationUpdateGreeting: &graphql.Field{
+			Type: graphql.NewNonNull(types.UpdateGreetingResponse),
+			Args: argsWithDefaults(graphql.FieldConfigArgument{
+				"input": nonNullField(types.GreetingInput, "Greeting input"),
+			}),
+			Resolve: gqlResolver.UpdateGreeting,
+		},
+	}
+
+	return graphql.NewObject(graphql.ObjectConfig{
+		Name:   "RootMutation",
+		Fields: fields,
+	})
+}

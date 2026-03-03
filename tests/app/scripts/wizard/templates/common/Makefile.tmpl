@@ -1,0 +1,23 @@
+.PHONY: init, tidy, mod, db_create, migration_create, migration_up, migration_down qa, mocks, test
+
+init: tidy mocks
+build:
+	./scripts/build.sh
+tidy:
+	go mod tidy
+mod:
+	go mod download
+db_create:
+	bin/{{.ServiceName}} db create
+migration_create:
+	migrate create -ext sql -dir migrations $(name)
+migration_up:
+	bin/{{.ServiceName}} db migrate-up
+migration_down:
+	bin/{{.ServiceName}} db migrate-down --steps 1
+qa:
+	golangci-lint run --tests=0
+mocks:
+	./scripts/generate-mocks.sh
+test:
+	go test -parallel 5 ./...

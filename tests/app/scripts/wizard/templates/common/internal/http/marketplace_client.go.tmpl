@@ -1,0 +1,20 @@
+package http
+
+import (
+	"net/http"
+
+	"{{.ModuleName}}/internal/contextkey"
+	"bitbucket.org/csgot/helis-market-base-client-go/pkg/tripperware"
+	opentracingtripperware "bitbucket.org/csgot/helis-opentracing-http-go/pkg/opentracinghttp/tripperware"
+	"github.com/opentracing/opentracing-go"
+)
+
+// NewDefaultMarketplaceClient returns HTTP client which supposed to be used for communication between marketplace services.
+// It has configured all necessary tripperwares, e.g. opentracing, correlation ID, etc.
+func NewDefaultMarketplaceClient(tracer opentracing.Tracer) *http.Client {
+	return tripperware.WithTripperWare(
+		http.DefaultClient,
+		opentracingtripperware.OpentracingPropagate(tracer),
+		tripperware.CorrelationID(contextkey.CID),
+	)
+}

@@ -1,0 +1,53 @@
+package {{.CustomAppPkgName}}
+
+import (
+	"context"
+
+	"bitbucket.org/csgot/helis-market-settings-client-go/pkg/stn"
+	"github.com/sirupsen/logrus"
+)
+
+type (
+	storage interface {
+		Ping() error
+	}
+
+	translator interface {
+		Trans(locale, id string, params interface{}) string
+		TransErr(locale string, err error) (string, bool)
+	}
+
+	validator interface {
+		Struct(s interface{}) error
+	}
+
+	Config struct {
+		Storage        storage
+		Translator     translator
+		Validator      validator
+		SettingsRouter *stn.Router
+		Logger         *logrus.Logger
+	}
+
+	Application struct {
+		storage        storage
+		translator     translator
+		validator      validator
+		settingsRouter *stn.Router
+		logger         *logrus.Logger
+	}
+)
+
+func NewApplication(c *Config) *Application {
+	return &Application{
+		storage:        c.Storage,
+		translator:     c.Translator,
+		validator:      c.Validator,
+		settingsRouter: c.SettingsRouter,
+		logger:         c.Logger,
+	}
+}
+
+func (a *Application) Run(ctx context.Context) {
+	a.logger.Info("Running")
+}

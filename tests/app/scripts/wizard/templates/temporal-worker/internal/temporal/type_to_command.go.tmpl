@@ -1,0 +1,16 @@
+package temporal
+
+import (
+	"{{.ModuleName}}/internal/temporal/command"
+)
+
+type TypeToCommandResolver struct{}
+
+func (t *TypeToCommandResolver) GetCommandFromType(messageType string) interface{} {
+	switch messageType {
+	case command.TemporalGreetingCommandType:
+		return &command.TemporalGreetingCommand{}
+	default:
+		return nil
+	}
+}

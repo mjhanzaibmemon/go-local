@@ -1,0 +1,51 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"os"
+
+	"github.com/go-sql-driver/mysql"
+	"github.com/spf13/cobra"
+	"{{.ModuleName}}/internal/log"
+	"{{.ModuleName}}/internal/db"
+	"gorm.io/gorm"
+)
+
+type creator struct {
+	db *gorm.DB
+}
+
+func createDBCreateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "create",
+		Short: "Creates database",
+		Run: func(cmd *cobra.Command, args []string) {
+			logger := log.NewLogger("info", "db", nil)
+
+            dsn := getDSNFromEnv()
+
+			dbConnection, err := db.NewConnection(&db.Config{
+                DSN: dsn.ConnectionArgs.String(), //This connection does not need database specified, as it is not yet created
+			})
+			if err != nil {
+				logger.WithError(err).Fatal("failed to initialize database")
+			}
+
+			dbCreator := &creator{db: dbConnection}
+
+			err = dbCreator.create(dsn.DatabaseName)
+			if err != nil {
+				logger.Fatalln(err.Error())
+
+				return
+			}
+
+			logger.WithField("dbName", dsn.DatabaseName).Info("Database created")
+		},
+	}
+}
+
+func (c *creator) create(databaseName string) error {
+	return c.db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", databaseName)).Error
+}

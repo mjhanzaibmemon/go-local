@@ -1,0 +1,40 @@
+package storage
+
+import (
+	"{{.ModuleName}}/internal/db"
+	"gorm.io/gorm"
+)
+
+type (
+	MySQLStorage struct {
+		_ struct{}
+
+		db *gorm.DB
+	}
+
+	MySQLStorageConfig struct {
+		DB *gorm.DB
+	}
+)
+
+func NewMySQL(c *MySQLStorageConfig) *MySQLStorage {
+	return &MySQLStorage{
+		db: c.DB,
+	}
+}
+
+// It's just an example storage method.
+// The recommendation is to always pass context as a first argument and use db instance with that context.
+// This is useful when opentracing is needed
+// and also allows to use other nice context related features like cancellation or other.
+// func (s *MySQLStorage) ExampleMethod(ctx context.Context, name string) error {
+//	...
+//	result := s.db.WithContext(ctx).Where("name = ?", name).First(&someStruct)
+//	...
+//
+//	return nil
+// }
+
+func (s *MySQLStorage) Ping() error {
+	return db.Ping(s.db)
+}

@@ -1,0 +1,87 @@
+package main
+
+import (
+	"context"
+	"fmt"
+
+	config "bitbucket.org/csgot/helis-config-go"
+	"bitbucket.org/csgot/helis-elasticlogrus/hook"
+	"github.com/spf13/cobra"
+	"{{.ModuleName}}/internal/app/someservice"
+	internalconfig "{{.ModuleName}}/internal/config"
+	"{{.ModuleName}}/internal/app/{{.CustomAppPkgName}}"
+	"{{.ModuleName}}/internal/contextkey"
+	"{{.ModuleName}}/internal/db"
+	internalhttp "{{.ModuleName}}/internal/http"
+	"{{.ModuleName}}/internal/log"
+	"{{.ModuleName}}/internal/metrics"
+	"{{.ModuleName}}/internal/signal"
+	"{{.ModuleName}}/internal/storage"
+	"gorm.io/gorm"
+)
+
+func create{{.CustomAppName}}Cmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "{{.CustomAppPkgName}}",
+		Short: "Starts {{.CustomAppName}}",
+		Run: func(cmd *cobra.Command, args []string) {
+			defer log.RecoverFromPanic()
+
+			cfg := &internalconfig.{{.CustomAppName}}Cmd{}
+			if err := config.Parse(cfg, ".env.{{.CustomAppPkgName}}"); err != nil {
+				panic(fmt.Errorf("failed to parse config: %w", err))
+			}
+
+			logger := newLogger(
+				cfg.LogLevel,
+				cfg.SensitiveFields,
+				hook.NewCorrelationID(contextkey.CID, hook.DefaultCIDFieldName),
+			)
+
+			tracer, tracerCloser := newNonSamplingTracer(cfg.TracerServiceName, logger)
+
+			defer func() {
+				_ = tracerCloser.Close()
+			}()
+
+			dsn := db.NewDSN(
+				&db.ConnectionArgs{
+					Username: cfg.DatabaseUsername,
+					Password: cfg.DatabasePassword,
+					Endpoint: cfg.DatabaseEndpoint,
+					Port:     cfg.DatabasePort,
+				},
+				cfg.DatabaseName,
+			)
+
+			dbConnection := newDBConnection(dsn.String(), []gorm.Plugin{db.NewGORMOpentracingPlugin(tracer)}, logger)
+
+			appStorage := storage.NewMySQL(&storage.MySQLStorageConfig{
+				DB: dbConnection,
+			})
+
+			trans := newTranslator(logger)
+
+			structValidator := newValidator(logger)
+
+			marketplaceClient := internalhttp.NewDefaultMarketplaceClient(tracer)
+
+			settingsRouter := newSettingsRouter(cfg.SettingsServiceURI, marketplaceClient, logger)
+
+			app := {{.CustomAppPkgName}}.NewApplication(&{{.CustomAppPkgName}}.Config{
+				Storage:        appStorage,
+				Translator:     trans,
+				Validator:      structValidator,
+				SettingsRouter: settingsRouter,
+				Logger:         logger,
+			})
+
+			ctx, cancel := context.WithCancel(context.Background())
+
+			go metrics.Endpoint(":" + cfg.MetricsHTTPPort)
+			go signal.Handler(cancel)
+
+			app.Run(ctx)
+		},
+	}
+}

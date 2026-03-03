@@ -1,0 +1,4 @@
+{
+  "messageType": "GreetingCommand",
+  "serializedMessage": "{\"Message\":\"Hello there\"}"
+}

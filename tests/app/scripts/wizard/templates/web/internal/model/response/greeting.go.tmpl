@@ -1,0 +1,12 @@
+package response
+
+type (
+	Greeting struct {
+		Message string `json:"message"`
+	}
+
+	UpdateGreeting struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+)

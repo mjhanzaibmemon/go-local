@@ -1,0 +1,19 @@
+package main
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
+
+// TODO: remove if cron jobs are not needed
+
+func createCronCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "cron",
+		Short: "Cron commands",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println("Run `{{.ServiceName}} cron --help` for more information.")
+		},
+	}
+}

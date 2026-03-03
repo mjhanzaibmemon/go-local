@@ -1,0 +1,21 @@
+package temporal
+
+import "{{.ModuleName}}/internal/translator"
+
+type Translator struct {
+	parent *translator.Translator
+}
+
+func NewTranslator(trans *translator.Translator) *Translator {
+	return &Translator{parent: trans}
+}
+
+func (t *Translator) TransErr(locale string, err error) (string, string, bool) {
+	msg, success := t.parent.TransErr(locale, err)
+
+	if success {
+		return "error", msg, true
+	}
+
+	return "", "", false
+}

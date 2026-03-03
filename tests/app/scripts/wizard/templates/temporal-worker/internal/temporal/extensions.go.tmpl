@@ -1,0 +1,44 @@
+package temporal
+
+import (
+	"time"
+
+	"{{.ModuleName}}/internal/contextkey"
+	"{{.ModuleName}}/internal/translator"
+	"{{.ModuleName}}/pkg/cacheadapter"
+
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper/extension"
+	temporalprocessor "bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper/processor"
+	"github.com/sirupsen/logrus"
+	"github.com/opentracing/opentracing-go"
+)
+
+const (
+	temporalDeduplicationTTL = 24 * time.Hour
+	temporalRequeueCount     = 3
+)
+
+func Extensions(
+	cacheAdapter *cacheadapter.RedisAdapter,
+	trans *translator.Translator,
+	enqueueTracer opentracing.Tracer,
+	logger *logrus.Logger,
+) ([]temporalprocessor.Extension, error) {
+	return []temporalprocessor.Extension{
+		extension.NewDeduplication(&extension.DeduplicationExtensionConfig{
+			ConditionChecker: DeduplicationConditionChecker,
+			CacheKeyBuilder: extension.PrefixedCacheKey(
+				extension.DeduplPrefixBody,
+				extension.HashedBodyCacheKeyBuilder,
+			),
+			Cache: cacheAdapter,
+			TTL:   temporalDeduplicationTTL,
+		}),
+		extension.NewCidExtension(contextkey.CID),
+		extension.NewErrorHandlerExtension(NewTranslator(trans), temporalRequeueCount, true),
+		extension.NewResponseWrapperExtension(),
+		extension.NewTracerExtension(&extension.TracerExtensionConfig{
+			Tracer: enqueueTracer,
+		}),
+	}, nil
+}

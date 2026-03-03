@@ -1,0 +1,92 @@
+package main
+
+import (
+	"io"
+	"net/http"
+
+	"github.com/go-playground/validator/v10"
+	"bitbucket.org/csgot/helis-market-settings-client-go/pkg/stn"
+	"bitbucket.org/csgot/helis-elasticlogrus/hook"
+	"github.com/opentracing/opentracing-go"
+	"github.com/sirupsen/logrus"
+	"{{.ModuleName}}/internal/translator"
+	"{{.ModuleName}}/internal/contextkey"
+	"{{.ModuleName}}/internal/db"
+	"{{.ModuleName}}/internal/log"
+	"{{.ModuleName}}/internal/settings"
+	"{{.ModuleName}}/internal/tracing"
+	"{{.ModuleName}}/pkg/validation"
+	"{{.ModuleName}}/pkg/translations"
+	"gorm.io/gorm"
+)
+
+func newLogger(logLevel, sensitiveFieldsStr string, customHooks ...logrus.Hook) *logrus.Logger {
+	sensitiveFields := newSensitiveFields(sensitiveFieldsStr)
+
+	hooks := []logrus.Hook{
+		hook.NewCorrelationID(contextkey.CID, hook.DefaultCIDFieldName),
+	}
+
+	hooks = append(hooks, customHooks...)
+
+	return log.NewLogger(logLevel, log.DefaultChannel, sensitiveFields, hooks...)
+}
+
+func newSensitiveFields(sensitiveFieldsStr string) log.SensitiveFields {
+	sensitiveFields, err := log.ParseSensitiveFields(sensitiveFieldsStr)
+	if err != nil {
+		panic(err)
+	}
+
+	return sensitiveFields
+}
+
+func newNonSamplingTracer(tracerServiceName string, logger *logrus.Logger) (opentracing.Tracer, io.Closer) {
+	tracer, tracerCloser, err := tracing.InitNonSamplingTracer(tracing.ServiceName(tracerServiceName))
+	if err != nil {
+		logger.WithError(err).Fatal("failed to initialize non sampling tracer")
+	}
+
+	return tracer, tracerCloser
+}
+
+func newDBConnection(databaseDSN string, plugins []gorm.Plugin, logger *logrus.Logger) *gorm.DB {
+	dbConnection, err := db.NewConnection(&db.Config{
+		DSN:                  databaseDSN,
+		Plugins:              plugins,
+	})
+	if err != nil {
+		logger.WithError(err).Fatal("failed to initialize database")
+	}
+
+	return dbConnection
+}
+
+func newSettingsRouter(settingsServiceURI string, httpClient *http.Client, logger *logrus.Logger) *stn.Router {
+	settingsRouter, err := settings.NewRouter(settingsServiceURI, httpClient, logger)
+	if err != nil {
+		logger.WithError(err).Fatal("failed to create settings router")
+	}
+
+	return settingsRouter
+}
+
+func newTranslator(logger *logrus.Logger) *translator.Translator {
+	translationsBundle, err := translations.Bundle(&translations.BundleConfig{
+		Dir: "./translations",
+	})
+	if err != nil {
+		logger.WithError(err).Fatal("failed to initialize translations bundle")
+	}
+
+	return translator.New(translationsBundle)
+}
+
+func newValidator(logger *logrus.Logger) *validator.Validate {
+	structValidator, err := validation.NewStructValidator([]validation.ValidateOption{}...)
+	if err != nil {
+		logger.WithError(err).Fatal("failed to initialize validator")
+	}
+
+	return structValidator
+}

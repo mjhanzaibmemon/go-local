@@ -1,0 +1,28 @@
+package metrics
+
+import (
+	"fmt"
+	"net/http"
+	"time"
+
+	"{{.ModuleName}}/internal/log"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+func Endpoint(metricsAddr string) {
+	defer log.RecoverFromPanic()
+
+	router := http.NewServeMux()
+	router.Handle("/metrics", promhttp.Handler())
+
+	src := &http.Server{
+		Addr:         metricsAddr,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		Handler:      router,
+	}
+
+	if err := src.ListenAndServe(); err != nil {
+		panic(fmt.Errorf("failed to serve metrics: %s", err.Error()))
+	}
+}

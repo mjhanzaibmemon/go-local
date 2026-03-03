@@ -1,0 +1,23 @@
+package gql
+
+import (
+	"github.com/graphql-go/graphql"
+)
+
+const (
+	QueryGreeting          = "greeting"
+	MutationUpdateGreeting = "updateGreeting"
+)
+
+func Schema(gqlResolver *Resolver, extensions ...graphql.Extension) (*graphql.Schema, error) {
+	schema, err := graphql.NewSchema(graphql.SchemaConfig{
+		Query:      rootQuery(gqlResolver),
+		Mutation:   rootMutation(gqlResolver),
+		Extensions: extensions,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &schema, nil
+}

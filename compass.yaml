@@ -1,0 +1,29 @@
+# Most keys/values here are set automatically by the Compass integration.
+# See our documentation and the documentation from Atlassian
+# https://documentation.eneba.engineering/compass.html
+# https://developer.atlassian.com/cloud/compass/config-as-code/structure-and-contents-of-a-compass-yml-file/
+
+configVersion: 1
+id: 'ari:cloud:compass:3fee7fa3-4663-4c14-9767-2308819c9e77:component/79b81e08-daa7-453b-b5a2-a06ced119396/404b5342-79d7-49d3-b248-63e2e4e34db2'
+name: Go
+slug: services-platform-gitlab-components-go
+description: 'Enables the development of GO projects'
+typeId: CAPABILITY
+ownerId: 'ari:cloud:identity::team/f7cbb24d-8f03-4bde-b129-c94e3a647c9b'
+fields:
+  tier: 2
+  lifecycle: Active
+relationships: {}
+links:
+  -
+    name: Jira
+    type: PROJECT
+    url: 'https://eneba.atlassian.net/jira/software/projects/EP/summary'
+  -
+    name: Opsgenie
+    type: ON_CALL
+    url: 'https://eneba.app.opsgenie.com/settings/schedule/detail/15c91524-63bf-4f75-92f3-4cd075cfb3a4'
+  -
+    name: 'Opsgenie service'
+    type: OTHER_LINK
+    url: 'https://eneba.app.opsgenie.com/service/59914349-92a9-4578-883d-3ece20126124'

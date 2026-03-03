@@ -1,0 +1,41 @@
+package web
+
+import (
+	baseclientmiddleware "bitbucket.org/csgot/helis-market-base-client-go/pkg/middleware"
+	stnmiddleware "bitbucket.org/csgot/helis-market-settings-client-go/pkg/middleware"
+	"bitbucket.org/csgot/helis-market-settings-client-go/pkg/stn"
+	"bitbucket.org/csgot/helis-monitoring-http-go/pkg/metrics"
+	"bitbucket.org/csgot/helis-monitoring-http-go/pkg/middleware"
+	opentracinghttpmiddleware "bitbucket.org/csgot/helis-opentracing-http-go/pkg/opentracinghttp/middleware"
+	"{{.ModuleName}}/internal/contextkey"
+	"{{.ModuleName}}/internal/http/handler"
+	"github.com/go-chi/chi"
+	"github.com/graphql-go/graphql"
+	"github.com/opentracing/opentracing-go"
+	"github.com/sirupsen/logrus"
+)
+
+type routerConfig struct {
+	gqlSchema      *graphql.Schema
+	storage        storage
+	logger         *logrus.Logger
+	httpTracer     opentracing.Tracer
+	settingsRouter *stn.Router
+}
+
+func initRouter(c *routerConfig) chi.Router {
+	router := chi.NewRouter()
+
+	router.Use(
+		baseclientmiddleware.CorrelationID(contextkey.CID),
+		middleware.BasicHTTPMetrics(&middleware.BasicMetricsConfig{}),
+		middleware.HTTPRequestsTotal(metrics.NewHTTPRequestsTotalRecorder()),
+		opentracinghttpmiddleware.OpenTracing(c.httpTracer),
+		stnmiddleware.Router(c.settingsRouter),
+	)
+
+	router.Get("/ping", handler.Ping(c.storage, c.logger))
+	router.Handle("/graphql/", handler.GraphQL(c.gqlSchema))
+
+	return router
+}

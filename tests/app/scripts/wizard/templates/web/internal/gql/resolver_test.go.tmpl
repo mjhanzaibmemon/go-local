@@ -1,0 +1,94 @@
+package gql
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"{{.ModuleName}}/internal/model/input"
+	"{{.ModuleName}}/internal/model/response"
+	"{{.ModuleName}}/internal/log"
+	"github.com/graphql-go/graphql"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestResolver_Greeting(t *testing.T) {
+	ctx := context.TODO()
+	params := graphql.ResolveParams{
+		Context: ctx,
+	}
+
+	gqlResolver := NewResolver(&ResolverConfig{
+		Logger: log.TestLogger(),
+	})
+
+	result, err := gqlResolver.Greeting(params)
+
+	assert.NoError(t, err)
+	assert.Equal(t, &response.Greeting{
+		Message: "Hello there!",
+	}, result)
+}
+
+func TestResolver_UpdateGreeting_ValidatorFails(t *testing.T) {
+	mockValidator := new(mockValidator)
+
+	ctx := context.TODO()
+	params := graphql.ResolveParams{
+		Context: ctx,
+		Args: map[string]interface{}{
+			"input": map[string]interface{}{
+				"name": "",
+			},
+		},
+	}
+
+	mockValidator.On("StructCtx", ctx, &input.Greeting{
+		Name: "",
+	}).Once().Return(errors.New("failed"))
+
+	gqlResolver := NewResolver(&ResolverConfig{
+		Validator: mockValidator,
+		Logger:    log.TestLogger(),
+	})
+
+	result, err := gqlResolver.UpdateGreeting(params)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+
+	mockValidator.AssertExpectations(t)
+}
+
+func TestResolver_UpdateGreeting_Success(t *testing.T) {
+	mockValidator := new(mockValidator)
+
+	ctx := context.TODO()
+	params := graphql.ResolveParams{
+		Context: ctx,
+		Args: map[string]interface{}{
+			"input": map[string]interface{}{
+				"name": "Sir",
+			},
+		},
+	}
+
+	mockValidator.On("StructCtx", ctx, &input.Greeting{
+		Name: "Sir",
+	}).Once().Return(nil)
+
+	gqlResolver := NewResolver(&ResolverConfig{
+		Validator: mockValidator,
+		Logger:    log.TestLogger(),
+	})
+
+	result, err := gqlResolver.UpdateGreeting(params)
+
+	assert.NoError(t, err)
+	assert.Equal(t, &response.UpdateGreeting{
+		Success: true,
+		Message: "Hello, Sir!",
+	}, result)
+
+	mockValidator.AssertExpectations(t)
+}

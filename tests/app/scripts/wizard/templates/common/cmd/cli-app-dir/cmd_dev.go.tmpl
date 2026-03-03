@@ -1,0 +1,17 @@
+package main
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
+
+func createDevCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "dev",
+		Short: "Helper commands to be used in DEV environment",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println("Run `{{.ServiceName}} dev --help` for more information.")
+		},
+	}
+}

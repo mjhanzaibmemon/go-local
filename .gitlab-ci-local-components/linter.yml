@@ -1,0 +1,5 @@
+# Mock stub for linter component (not needed locally)
+spec:
+  inputs:
+    rules:
+      default: []

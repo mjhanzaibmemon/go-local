@@ -1,0 +1,34 @@
+---
+# gitlab-ci-local variables file
+# Format: flat key: value (NO "variables:" wrapper — that was v2 format)
+# Reference: https://github.com/firecow/gitlab-ci-local#--variables-file
+
+# --- GitLab CI built-in variables (simulated locally) ---
+CI_SERVER_FQDN: "gitlab.com"
+CI_SERVER_HOST: "gitlab.com"
+CI_PROJECT_PATH: "d5100/services/platform/gitlab-components/generic"
+CI_PROJECT_NAME: "go-main"
+CI_COMMIT_SHA: "local-dev"
+CI_COMMIT_SHORT_SHA: "localdev"
+CI_COMMIT_REF_SLUG: "local"
+CI_COMMIT_REF_NAME: "local"
+CI_MERGE_REQUEST_IID: "1"
+CI_PROJECT_ID: "1"
+CI_PIPELINE_ID: "1"
+CI_API_V4_URL: "https://gitlab.com/api/v4"
+CI_PROJECT_DIR: "/builds/go-main"
+
+# --- App variables ---
+GITLAB_TOKEN: "local-dev-token"
+LOG_INFO: '\e[34mINFO\e[0m'
+LOG_ERROR: '\e[31mERROR\e[0m'
+LOG_SUCCESS: '\e[32mSUCCESS\e[0m'
+LOG_WARNING: '\e[33mWARNING\e[0m'
+
+# --- AWS / ECR ---
+# Empty = skip ECR login locally
+ECR_REGISTRY: ""
+
+# --- Bitbucket (private deps) ---
+# If you have SSH keys for bitbucket.org/csgot set GIT_SSH_KEY path here
+# GIT_SSH_KEY: "~/.ssh/id_rsa"

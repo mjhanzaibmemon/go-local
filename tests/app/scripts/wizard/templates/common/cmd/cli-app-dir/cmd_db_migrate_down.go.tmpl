@@ -1,0 +1,59 @@
+package main
+
+import (
+	"fmt"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/mysql"
+	"github.com/spf13/cobra"
+	"{{.ModuleName}}/internal/db"
+	"{{.ModuleName}}/internal/log"
+	"gorm.io/gorm"
+)
+
+const (
+	flagDownSteps = "steps"
+)
+
+func createDBMigrateDownCmd() *cobra.Command {
+	var steps uint
+
+	cmd := &cobra.Command{
+		Use:   "migrate-down",
+		Short: "Migrates database up",
+		Run: func(cmd *cobra.Command, args []string) {
+			logger := log.NewLogger("info", "db", nil)
+
+            dsn := getDSNFromEnv()
+
+			dbConnection := newDBConnection(dsn.String(), []gorm.Plugin{}, logger)
+
+			migratorDB, err := dbConnection.DB()
+			if err != nil {
+				logger.WithError(err).Fatalln("failed to initialize migrator database")
+			}
+
+			driver, err := mysql.WithInstance(migratorDB, &mysql.Config{})
+			if err != nil {
+				logger.Fatalln(fmt.Sprintf("failed to initialize migrator driver: %s", err))
+			}
+
+			migrateInstance, err := migrate.NewWithDatabaseInstance(migrationsSource, dbConnection.Name(), driver)
+			if err != nil {
+				logger.Fatalln(fmt.Sprintf("failed to initialize migrator: %s", err))
+			}
+
+			migrator := db.NewMigrator(migrateInstance, logger)
+			migrator.Down(steps)
+		},
+	}
+
+	cmd.Flags().UintVar(
+		&steps,
+		flagDownSteps,
+		1,
+		"Steps down",
+	)
+
+	return cmd
+}

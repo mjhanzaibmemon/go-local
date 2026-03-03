@@ -1,0 +1,14 @@
+# Mock stub for docker component (not needed locally — AWS ECR image not accessible)
+spec:
+  inputs:
+    file:
+      default: "Dockerfile"
+    app-root-dir:
+      default: "."
+    build-context:
+      default: "."
+    release-images:
+      default: false
+    build-rules-changes:
+      type: array
+      default: []

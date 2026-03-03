@@ -1,0 +1,28 @@
+package main
+
+import (
+	"{{.ModuleName}}/internal/contextkey"
+	"{{.ModuleName}}/internal/temporal"
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper"
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper/config"
+	"github.com/sirupsen/logrus"
+	"go.temporal.io/sdk/client"
+	"os"
+)
+
+func newTemporalClient(temporalEnvFile string, logger *logrus.Logger) client.Client {
+	temporalClient, err := temporalwrapper.NewClientFromEnv(
+		config.ClientFromEnv{
+			TypeToCommandResolver: &temporal.TypeToCommandResolver{},
+			CidCtxKey:             contextkey.CID,
+			TemporalEnvFile:       temporalEnvFile,
+			Logger:                logger,
+		},
+	)
+	if err != nil {
+		logger.WithError(err).Error("failed to initialize temporal client")
+		os.Exit(1)
+	}
+
+	return temporalClient
+}

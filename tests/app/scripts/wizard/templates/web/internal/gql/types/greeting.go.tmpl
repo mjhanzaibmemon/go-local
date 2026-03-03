@@ -1,0 +1,41 @@
+package types
+
+import "github.com/graphql-go/graphql"
+
+var (
+	Greeting = graphql.NewObject(
+		graphql.ObjectConfig{
+			Name: "Greeting",
+			Fields: graphql.Fields{
+				"message": &graphql.Field{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+		},
+	)
+
+	GreetingInput = graphql.NewInputObject(
+		graphql.InputObjectConfig{
+			Name: "GreetingInput",
+			Fields: graphql.InputObjectConfigFieldMap{
+				"name": &graphql.InputObjectFieldConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+		},
+	)
+
+	UpdateGreetingResponse = graphql.NewObject(
+		graphql.ObjectConfig{
+			Name: "UpdateGreetingResponse",
+			Fields: graphql.Fields{
+				"success": &graphql.Field{
+					Type: graphql.Boolean,
+				},
+				"message": &graphql.Field{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+		},
+	)
+)

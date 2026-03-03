@@ -1,0 +1,35 @@
+package gql
+
+import (
+    "{{.ModuleName}}/internal/gql/types"
+	"github.com/graphql-go/graphql"
+)
+
+// argsWithDefaults ensures that default arguments required by
+// Eneba GQL conventions are always added
+// If no additional args are needed, then nil should be passed.
+func argsWithDefaults(args graphql.FieldConfigArgument) graphql.FieldConfigArgument {
+	fieldCfg := graphql.FieldConfigArgument{
+		"context": nullField(types.ContextInput, ""),
+	}
+
+	for key, arg := range args {
+		fieldCfg[key] = arg
+	}
+
+	return fieldCfg
+}
+
+func nonNullField(ofType graphql.Type, description string) *graphql.ArgumentConfig {
+	return &graphql.ArgumentConfig{
+		Type:        graphql.NewNonNull(ofType),
+		Description: description,
+	}
+}
+
+func nullField(ofType graphql.Type, description string) *graphql.ArgumentConfig {
+	return &graphql.ArgumentConfig{
+		Type:        ofType,
+		Description: description,
+	}
+}

@@ -1,0 +1,10 @@
+# Mock stub for semantic-release component (not needed locally)
+# This file satisfies the include: component: requirement without doing anything
+
+spec:
+  inputs:
+    # Accept any inputs that semantic-release might use
+    release-rules:
+      default: []
+    stages:
+      default: []

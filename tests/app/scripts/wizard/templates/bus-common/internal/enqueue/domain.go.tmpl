@@ -1,0 +1,9 @@
+package enqueue
+
+import "time"
+
+const (
+	DeduplicationTTL       = 24 * time.Hour
+	SQSVisibilityTimeout   = 60 * time.Second
+	SQSMaxNumberOfMessages = 10
+)

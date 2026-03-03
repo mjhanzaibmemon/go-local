@@ -1,0 +1,25 @@
+package config
+
+import "time"
+
+type EventBusCmd struct {
+	AWSRegion                  string        `koanf:"AWS_REGION" default:"eu-west-1"`
+	AWSEndpoint                string        `koanf:"AWS_ENDPOINT"`
+	SQSQueueURL                string        `koanf:"SQS_QUEUE_URL" required:"true"`
+	SQSLargeMessageLocationURI string        `koanf:"SQS_LARGE_MESSAGE_LOCATION_URI" required:"true"`
+    DatabaseUsername           string        `koanf:"DATABASE_USERNAME" required:"true"`
+	DatabasePassword           string        `koanf:"DATABASE_PASSWORD" required:"true"`
+	DatabaseEndpoint           string        `koanf:"DATABASE_ENDPOINT" required:"true"`
+	DatabasePort               string        `koanf:"DATABASE_PORT" required:"true"`
+	DatabaseName               string        `koanf:"DATABASE_NAME" required:"true"`
+	CacheRedisDSN              string        `koanf:"CACHE_REDIS_DSN" required:"true"`
+	CacheRedisNamespace        string        `koanf:"CACHE_REDIS_NAMESPACE" required:"true"`
+	ListenerConcurrency        int           `koanf:"LISTENER_CONCURRENCY" default:"1"`
+	MessageWaitTimeout         time.Duration `koanf:"LISTENER_MESSAGE_WAIT_TIMEOUT" default:"5s"`
+	MetricsHTTPPort            string        `koanf:"METRICS_HTTP_PORT" default:"9091"`
+	PingHTTPPort               string        `koanf:"PING_HTTP_PORT" default:"8081"`
+	LogLevel                   string        `koanf:"LOG_LEVEL" default:"info"`
+	TracerServiceName          string        `koanf:"TRACER_SERVICE_NAME" required:"true"`
+	SettingsServiceURI         string        `koanf:"SETTINGS_SERVICE_URI" required:"true"`
+	SensitiveFields            string        `koanf:"SENSITIVE_FIELDS" default:"{}"`
+}

@@ -1,0 +1,36 @@
+include:
+  - component: gitlab.com/d5100/services/platform/gitlab-components/generic/docker@1
+    inputs:
+      file: "tests/Dockerfile"
+      app-root-dir: "tests/app"
+      build-context: "tests"
+      release-images: false
+      build-rules-changes:
+        - templates/go.yml
+        - tests/.gitlab-ci.yml
+  - component: $CI_SERVER_FQDN/$CI_PROJECT_PATH/go@$CI_COMMIT_SHA
+    inputs:
+      root-dir: "tests/app"
+      test-rules:
+        - if: $CI_MERGE_REQUEST_IID
+          changes:
+            - tests/app/**/*
+            - tests/.gitlab-ci.yml
+            - templates/go.yml
+      cobertura-version: "v1.3.0"
+
+Ensure Go job is added:
+  extends: .check:jobs
+  parallel:
+    matrix:
+      - JOB_NAME: "Go Lint"
+      - JOB_NAME: "Go Unit Test"
+      - JOB_NAME: "Go Vet"
+      - JOB_NAME: "Go Vulncheck"
+      - JOB_NAME: "Go Hive Validate"
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+      changes:
+        - tests/app/**/*
+        - tests/.gitlab-ci.yml
+        - templates/go.yml

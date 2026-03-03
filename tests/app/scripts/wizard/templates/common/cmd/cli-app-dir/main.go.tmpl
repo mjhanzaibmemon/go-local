@@ -1,0 +1,32 @@
+package main
+
+import (
+	"os"
+)
+
+func main() {
+	rootCmd := createRootCmd()
+
+	dbCmdGroup := createDBCmd()
+	dbCmdGroup.AddCommand(
+		createDBCreateCmd(),
+		createDBMigrateUpCmd(),
+		createDBMigrateDownCmd(),
+	)
+
+	// TODO: remove if cron jobs are not needed
+	cronCmdGroup := createCronCmd()
+	// <!-- BEGIN_CRON_COMMANDS -->
+
+	devCmdGroup := createDevCmd()
+	// <!-- BEGIN_DEV_COMMANDS -->
+
+	rootCmd.AddCommand(dbCmdGroup)
+	rootCmd.AddCommand(cronCmdGroup)
+	rootCmd.AddCommand(devCmdGroup)
+	// <!-- BEGIN_COMMANDS -->
+
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}

@@ -1,0 +1,21 @@
+package enqueue
+
+import (
+	"encoding/json"
+
+	"bitbucket.org/csgot/helis-enq2bus-go/pkg/enq2bus"
+	"bitbucket.org/csgot/helis-enqueue-go/pkg/enqueue"
+)
+
+// BodyBasedDeduplicationConditionChecker is a implementation of conditionChecker for deduplication extension.
+// Returns true on commands/events body based deduplication should be applied for.
+func BodyBasedDeduplicationConditionChecker(msg enqueue.Message) bool {
+	envelope := &enq2bus.Envelope{}
+	if err := json.Unmarshal([]byte(msg.Body()), envelope); err != nil {
+		return false
+	}
+
+	// TODO: add command or return false if body based deduplication should not be checked
+	// TODO: use const
+	return envelope.Type == "GreetingCommand"
+}

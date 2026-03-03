@@ -1,0 +1,7 @@
+{
+  "class": "TemporalGreetingCommand",
+  "alias": "TemporalGreetingCommand",
+  "data": {
+    "message": "Hello there"
+  }
+}

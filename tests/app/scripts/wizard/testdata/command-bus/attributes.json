@@ -1,0 +1,6 @@
+{
+  "Headers": {
+    "DataType": "String",
+    "StringValue": "[{\"someAttr\":\"someVal\"},{}]"
+  }
+}

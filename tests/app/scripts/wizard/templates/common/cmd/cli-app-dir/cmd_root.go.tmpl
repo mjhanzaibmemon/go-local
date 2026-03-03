@@ -1,0 +1,17 @@
+package main
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
+
+func createRootCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "{{.ServiceName}}",
+		Short: "This is an awesome service!",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println("Run `{{.ServiceName}} --help` for more information.")
+		},
+	}
+}

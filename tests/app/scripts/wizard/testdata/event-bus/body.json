@@ -1,0 +1,4 @@
+{
+  "messageType": "GreetingEvent",
+  "serializedMessage": "{\"Message\":\"Hello there\"}"
+}

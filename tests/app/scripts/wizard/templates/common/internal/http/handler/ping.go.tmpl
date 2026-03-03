@@ -1,0 +1,25 @@
+package handler
+
+import (
+	"net/http"
+
+	"{{.ModuleName}}/internal/http/response"
+	"github.com/sirupsen/logrus"
+)
+
+type dbPinger interface {
+	Ping() error
+}
+
+func Ping(pinger dbPinger, logger *logrus.Logger) func(w http.ResponseWriter, req *http.Request) {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if err := pinger.Ping(); err != nil {
+			logger.WithError(err).Error("DB connection ping failed")
+			response.Text(w, "DB connection ping failed", http.StatusInternalServerError)
+
+			return
+		}
+
+		response.Text(w, "PONG", http.StatusOK)
+	}
+}

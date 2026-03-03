@@ -1,0 +1,4 @@
+docker
+.env.*.local
+app/cmd/*/app
+bin

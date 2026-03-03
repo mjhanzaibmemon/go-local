@@ -1,0 +1,10 @@
+package response
+
+import "net/http"
+
+// Text writes plain text HTTP response
+func Text(w http.ResponseWriter, content string, statusCode int) {
+	w.WriteHeader(statusCode)
+	w.Header().Add("Content-Type", "text/plain")
+	w.Write([]byte(content)) //nolint:errcheck
+}

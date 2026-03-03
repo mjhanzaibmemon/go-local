@@ -1,0 +1,101 @@
+package main
+
+import (
+	"fmt"
+
+	config "bitbucket.org/csgot/helis-config-go"
+	"bitbucket.org/csgot/helis-elasticlogrus/hook"
+	"bitbucket.org/csgot/mp-platform-lib-opentracing-graphql-go/pkg/opentracinggraphql/censor"
+	"bitbucket.org/csgot/mp-platform-lib-opentracing-graphql-go/pkg/opentracinggraphql/extension"
+	"github.com/spf13/cobra"
+	"{{.ModuleName}}/internal/app/web"
+	internalconfig "{{.ModuleName}}/internal/config"
+	"{{.ModuleName}}/internal/contextkey"
+	"{{.ModuleName}}/internal/db"
+	"{{.ModuleName}}/internal/gql"
+	internalhttp "{{.ModuleName}}/internal/http"
+	"{{.ModuleName}}/internal/log"
+	"{{.ModuleName}}/internal/metrics"
+	"{{.ModuleName}}/internal/storage"
+	"gorm.io/gorm"
+)
+
+func createWebCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "web",
+		Short: "Web application",
+		Run: func(cmd *cobra.Command, args []string) {
+			defer log.RecoverFromPanic()
+
+			cfg := &internalconfig.WebCmd{}
+			if err := config.Parse(cfg, ".env.web"); err != nil {
+				panic(fmt.Errorf("failed to parse config: %w", err))
+			}
+
+			logger := newLogger(
+				cfg.LogLevel,
+				cfg.SensitiveFields,
+				hook.NewCorrelationID(contextkey.CID, hook.DefaultCIDFieldName),
+			)
+
+			tracer, tracerCloser := newNonSamplingTracer(cfg.TracerServiceName, logger)
+
+			defer func() {
+				_ = tracerCloser.Close()
+			}()
+
+            dsn := db.NewDSN(
+				&db.ConnectionArgs{
+					Username: cfg.DatabaseUsername,
+					Password: cfg.DatabasePassword,
+					Endpoint: cfg.DatabaseEndpoint,
+					Port:     cfg.DatabasePort,
+				},
+				cfg.DatabaseName,
+			)
+
+			dbConnection := newDBConnection(dsn.String(), []gorm.Plugin{db.NewGORMOpentracingPlugin(tracer)}, logger)
+
+			appStorage := storage.NewMySQL(&storage.MySQLStorageConfig{
+				DB: dbConnection,
+			})
+
+			structValidator := newValidator(logger)
+
+			gqlResolver := gql.NewResolver(&gql.ResolverConfig{
+				Validator: structValidator,
+				Logger:    logger,
+			})
+
+			gqlTracerExt := extension.NewTracerExtension(&extension.TracerExtensionConfig{
+				Tracer: tracer,
+				Censor: censor.NewGQLVariablesCensor(newSensitiveFields(cfg.SensitiveFields)),
+			})
+
+			gqlSchema, err := gql.Schema(gqlResolver, gqlTracerExt)
+			if err != nil {
+				logger.WithError(err).Fatal("failed to create GraphQL schema")
+			}
+
+			marketplaceClient := internalhttp.NewDefaultMarketplaceClient(tracer)
+
+			settingsRouter := newSettingsRouter(cfg.SettingsServiceURI, marketplaceClient, logger)
+
+			trans := newTranslator(logger)
+
+			app := web.NewApplication(&web.Config{
+				Storage:        appStorage,
+				GQLSchema:      gqlSchema,
+				SettingsRouter: settingsRouter,
+				ServerAddress:  ":" + cfg.HTTPPort,
+				Translator:     trans,
+				Logger:         logger,
+				HTTPTracer:     tracer,
+			})
+
+			go metrics.Endpoint(":" + cfg.MetricsHTTPPort)
+
+			app.Run()
+		},
+	}
+}

@@ -1,0 +1,23 @@
+package config
+
+type TemporalWorkerCmd struct {
+    AWSRegion               string `koanf:"AWS_REGION" default:"eu-west-1"`
+    AWSEndpoint             string `koanf:"AWS_ENDPOINT"`
+	TemporalEndpoint        string `koanf:"TEMPORAL_ENDPOINT" default:"temporal:7233"`
+	TemporalQueueName       string `koanf:"TEMPORAL_QUEUE_NAME" required:"true"`
+    DatabaseUsername        string `koanf:"DATABASE_USERNAME" required:"true"`
+	DatabasePassword        string `koanf:"DATABASE_PASSWORD" required:"true"`
+	DatabaseEndpoint        string `koanf:"DATABASE_ENDPOINT" required:"true"`
+	DatabasePort            string `koanf:"DATABASE_PORT" required:"true"`
+	DatabaseName            string `koanf:"DATABASE_NAME" required:"true"`
+	CacheRedisDSN           string `koanf:"CACHE_REDIS_DSN" required:"true"`
+	CacheRedisNamespace     string `koanf:"CACHE_REDIS_NAMESPACE" required:"true"`
+	LargeMessageLocationURI string `koanf:"TEMPORAL_LARGE_FILE_LOCATION"`
+	MetricsHTTPPort         string `koanf:"METRICS_HTTP_PORT" default:"9094"`
+	PingHTTPPort            string `koanf:"PING_HTTP_PORT" default:"8084"`
+	LogLevel                string `koanf:"LOG_LEVEL" default:"info"`
+	TracerServiceName       string `koanf:"TRACER_SERVICE_NAME" required:"true"`
+	SettingsServiceURI      string `koanf:"SETTINGS_SERVICE_URI" required:"true"`
+	SensitiveFields         string `koanf:"SENSITIVE_FIELDS" default:"{}"`
+	AppDevMode              bool   `koanf:"APP_DEV_MODE" default:"false"`
+}

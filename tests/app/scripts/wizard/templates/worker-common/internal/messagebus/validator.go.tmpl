@@ -1,0 +1,30 @@
+package messagebus
+
+import (
+	"context"
+
+	"bitbucket.org/csgot/helis-messagebus-go/v2/pkg/messagebus"
+	heliserrors "bitbucket.org/csgot/mp-platform-lib-errors-go/pkg/errors"
+	"github.com/go-playground/validator/v10"
+	"github.com/sirupsen/logrus"
+)
+
+type StandardValidator struct {
+	structValidator *validator.Validate
+}
+
+func NewValidator(structValidator *validator.Validate) *StandardValidator {
+	return &StandardValidator{
+		structValidator: structValidator,
+	}
+}
+
+func (v *StandardValidator) Validate(ctx context.Context, msg *messagebus.Message) error {
+	if err := v.structValidator.StructCtx(ctx, msg); err != nil {
+		errs := err.(validator.ValidationErrors)
+
+		return heliserrors.WithWarnLogLevel(errs)
+	}
+
+	return nil
+}

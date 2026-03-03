@@ -1,0 +1,28 @@
+package http
+
+import (
+	"net/http"
+	"time"
+
+	httphandler "{{.ModuleName}}/internal/http/handler"
+	"{{.ModuleName}}/internal/storage"
+	"github.com/sirupsen/logrus"
+)
+
+func PingServerFn(pingServerAddr string, logger *logrus.Logger, s *storage.MySQLStorage) {
+	var pingHandler http.HandlerFunc = httphandler.Ping(s, logger)
+
+	router := http.NewServeMux()
+	router.Handle("/ping", pingHandler)
+
+	src := &http.Server{
+		Addr:         pingServerAddr,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		Handler:      router,
+	}
+
+	if err := src.ListenAndServe(); err != nil {
+		logger.WithError(err).Error("failed to serve ping")
+	}
+}

@@ -1,0 +1,15 @@
+package temporal
+
+import (
+	"{{.ModuleName}}/internal/temporal/command"
+
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper/transport"
+	"go.temporal.io/sdk/activity"
+)
+
+//nolint:gocritic
+func DeduplicationConditionChecker(info activity.Info, payload transport.DataWrapper) bool {
+	activityName := info.ActivityType.Name
+
+	return activityName == command.TemporalGreetingCommandType
+}

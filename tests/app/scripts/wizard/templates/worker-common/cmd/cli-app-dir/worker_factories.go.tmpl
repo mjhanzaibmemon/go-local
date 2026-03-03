@@ -1,0 +1,45 @@
+package main
+
+import (
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/c2fo/vfs/v6/backend"
+	"github.com/c2fo/vfs/v6/backend/s3"
+	awss3 "github.com/aws/aws-sdk-go/service/s3"
+	"github.com/c2fo/vfs/v6"
+	"github.com/c2fo/vfs/v6/vfssimple"
+	"github.com/sirupsen/logrus"
+	"{{.ModuleName}}/pkg/cacheadapter"
+)
+
+// prepareVFSForServiceAccount overrides default S3 backend which is registered by github.com/c2fo/vfs
+// This is needed, because S3 backed registered by github.com/c2fo/vfs is not working with service account.
+// This function basically forces to use default AWS SDK credentials provider.
+func prepareVFSForServiceAccount(awsEndpoint, awsRegion string) {
+	s3Cfg := aws.NewConfig().WithEndpoint(awsEndpoint).WithRegion(awsRegion)
+	sess := session.Must(session.NewSession(s3Cfg))
+	s3Client := awss3.New(sess)
+
+	backend.Register(s3.Scheme, s3.NewFileSystem().WithClient(s3Client))
+}
+
+func newLargeMessageLocation(locationURI string, logger *logrus.Logger) vfs.Location {
+	largeMessageLocation, err := vfssimple.NewLocation(locationURI)
+	if err != nil {
+		logger.WithError(err).Fatal("failed to initialize large message location")
+	}
+
+	return largeMessageLocation
+}
+
+func newRedisCacheAdapter(redisDSN, namespace string, logger *logrus.Logger) *cacheadapter.RedisAdapter {
+	redisAdapter, err := cacheadapter.NewRedis(&cacheadapter.RedisConfig{
+		DSN:       redisDSN,
+		Namespace: namespace,
+	})
+	if err != nil {
+		logger.WithError(err).Fatal("failed to initialize redis cache adapter")
+	}
+
+	return redisAdapter
+}

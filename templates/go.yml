@@ -1,0 +1,233 @@
+spec:
+  inputs:
+    test-rules:
+      type: array
+      default: []
+      description: Additional trigger rules for testing
+    root-dir:
+      default: "app"
+      description: Root directory for the application code
+    test-parallel:
+      default: "5"
+      description: Number of parallel unit test executions
+    lint-timeout:
+      default: "3m"
+      description: Maximum linting execution time
+    lint-tests:
+      default: "0"
+      description: Whether to lint test files or not
+    # Kubernetes resources for jobs
+    lint-memory:
+      default: "2Gi"
+    unit-test-memory:
+      default: "2Gi"
+    vet-memory:
+      default: "2Gi"
+    vulncheck-memory:
+      default: "2Gi"
+    docker-app-path:
+      default: "/go/app/source"
+    docker-app-image:
+      default: 533267242017.dkr.ecr.eu-west-1.amazonaws.com/cache/kaniko:${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-test
+    cobertura-version:
+      default: "v1.4.0"
+    vanity-import:
+      default: "false"
+      description: Enable vanity import publishing to go.eneba.engineering on tag
+
+---
+
+.go:conditions:
+  application:rules:
+    - if: $CI_MERGE_REQUEST_IID && "$[[ inputs.root-dir ]]" != "."
+      exists: ["$[[ inputs.root-dir ]]/go.mod"]
+      changes:
+        - "$[[ inputs.root-dir ]]/**/*"
+        - "Dockerfile"
+  module:rules:
+    - if: $CI_MERGE_REQUEST_IID && "$[[ inputs.root-dir ]]" == "."
+      exists: ["go.mod"]
+
+.go:base:
+  stage: test
+  image: $[[ inputs.docker-app-image ]]
+  cache: []
+  dependencies: []
+  interruptible: true
+  variables:
+    GIT_STRATEGY: none
+    KUBERNETES_NODE_SELECTOR_ARCH: "kubernetes.io/arch=arm64"
+
+Go Lint:
+  extends: .go:base
+  variables:
+    KUBERNETES_MEMORY_REQUEST: "$[[ inputs.lint-memory ]]"
+    KUBERNETES_MEMORY_LIMIT: "$[[ inputs.lint-memory ]]"
+  script:
+    - |
+      cd $[[ inputs.docker-app-path ]]
+      mkdir -p -m 777 $CI_PROJECT_DIR/reports
+      set +e
+      golangci-lint run --tests=$[[ inputs.lint-tests ]] --timeout=$[[ inputs.lint-timeout ]] --output.text.print-issued-lines=true --output.code-climate.path=code-quality-report.json --output.text.path=stdout
+      status=$?
+      cp code-quality-report.json $CI_PROJECT_DIR/reports/code-quality-report.json || true
+      exit $status
+  artifacts:
+    name: "$CI_JOB_NAME artifacts from $CI_PROJECT_NAME on $CI_COMMIT_REF_SLUG"
+    when: always
+    expire_in: 1 day
+    paths: ["$CI_PROJECT_DIR/reports/code-quality-report.json"]
+    reports:
+      codequality: $CI_PROJECT_DIR/reports/code-quality-report.json
+  rules:
+    - !reference [.go:conditions, application:rules]
+    - !reference [.go:conditions, module:rules]
+    - $[[ inputs.test-rules ]]
+
+Go Unit Test:
+  extends: .go:base
+  variables:
+    KUBERNETES_MEMORY_REQUEST: "$[[ inputs.unit-test-memory ]]"
+    KUBERNETES_MEMORY_LIMIT: "$[[ inputs.unit-test-memory ]]"
+  script:
+    - cd $[[ inputs.docker-app-path ]]
+    - mkdir -p -m 777 $CI_PROJECT_DIR/reports
+    - echo -e "${LOG_INFO} Run tests"
+    - gotestsum --junitfile $CI_PROJECT_DIR/reports/gounit.xml --format testname -- -coverprofile=$CI_PROJECT_DIR/reports/cover.out -covermode count ./...
+    - echo -e "${LOG_INFO}"
+    - echo -e "${LOG_INFO} Prepare reports"
+    - echo -e "${LOG_INFO}"
+    - go tool cover -func $CI_PROJECT_DIR/reports/cover.out | tail -n 1
+    - go get github.com/boumenot/gocover-cobertura@$[[ inputs.cobertura-version ]]
+    - go run github.com/boumenot/gocover-cobertura < $CI_PROJECT_DIR/reports/cover.out > $CI_PROJECT_DIR/reports/coverage.cobertura.xml
+    - |
+      # Fix paths in coverage report
+      if [ "$[[ inputs.root-dir ]]" == "." ]; then
+        sed -i "s|$[[ inputs.docker-app-path ]]|$CI_PROJECT_DIR|" $CI_PROJECT_DIR/reports/coverage.cobertura.xml
+      else
+        sed -i "s|$[[ inputs.docker-app-path ]]|$CI_PROJECT_DIR/$[[ inputs.root-dir ]]|" $CI_PROJECT_DIR/reports/coverage.cobertura.xml
+      fi
+
+  coverage: '/total:\s+\(statements\)\s+\d+.\d+%/'
+  artifacts:
+    name: "$CI_JOB_NAME artifacts from $CI_PROJECT_NAME on $CI_COMMIT_REF_SLUG"
+    when: always
+    expire_in: 10 day
+    paths: ["${CI_PROJECT_DIR}/reports/*"]
+    reports:
+      junit: reports/gounit.xml
+      coverage_report:
+        coverage_format: cobertura
+        # This path cannot be changed. We have other CI jobs that depend on it
+        path: "$CI_PROJECT_DIR/reports/coverage.cobertura.xml"
+  rules:
+    - !reference [.go:conditions, application:rules]
+    - !reference [.go:conditions, module:rules]
+    - $[[ inputs.test-rules ]]
+
+Go Vet:
+  extends: .go:base
+  variables:
+    KUBERNETES_MEMORY_REQUEST: "$[[ inputs.vet-memory ]]"
+    KUBERNETES_MEMORY_LIMIT: "$[[ inputs.vet-memory ]]"
+  script:
+    - cd $[[ inputs.docker-app-path ]]
+    - go vet ./...
+  rules:
+    - !reference [.go:conditions, application:rules]
+    - !reference [.go:conditions, module:rules]
+    - $[[ inputs.test-rules ]]
+
+# govulncheck also notifies about vulnerabilities found in golang version used
+Go Vulncheck:
+  extends: .go:base
+  variables:
+    KUBERNETES_MEMORY_REQUEST: "$[[ inputs.vulncheck-memory ]]"
+    KUBERNETES_MEMORY_LIMIT: "$[[ inputs.vulncheck-memory ]]"
+  script:
+    - cd $[[ inputs.docker-app-path ]]
+    - govulncheck -scan package ./...  # stick to scanning packages, code call scanning is expensive
+  rules:
+    - !reference [.go:conditions, application:rules]
+    - $[[ inputs.test-rules ]]
+
+Go Hive Validate:
+  extends: .go:base
+  variables:
+    KUBERNETES_CPU_REQUEST: 10m
+    KUBERNETES_MEMORY_REQUEST: 100M
+  script:
+    - cd $[[ inputs.docker-app-path ]]
+    - |
+      if [ -z "$GO_HIVE_VALIDATE_COMMAND" ]; then
+        echo -e "${LOG_WARNING} Command not specified in GO_HIVE_VALIDATE_COMMAND. Doing nothing."
+        exit 0
+      fi
+
+      echo -e "${LOG_INFO} Validating graphql schema"
+      bash -c "$GO_HIVE_VALIDATE_COMMAND"
+  rules:
+    - !reference [.go:conditions, application:rules]
+    - $[[ inputs.test-rules ]]
+
+Go Vanity Import:
+  stage: deploy
+  image:
+    name: amazon/aws-cli:latest
+    entrypoint: [""]
+  cache: []
+  dependencies: []
+  interruptible: true
+  variables:
+    GIT_STRATEGY: fetch
+    GIT_DEPTH: 1
+  script:
+    - |
+      set -e
+
+      MODULE_PATH=$(grep -E '^module ' "$[[ inputs.root-dir ]]/go.mod" | awk '{print $2}')
+
+      if [ -z "$MODULE_PATH" ]; then
+        echo "ERROR: Could not extract module path from go.mod"
+        exit 1
+      fi
+
+      case "$MODULE_PATH" in
+        go.eneba.engineering/*) ;;
+        *)
+          echo "Module path '${MODULE_PATH}' does not use go.eneba.engineering/, skipping"
+          exit 0
+          ;;
+      esac
+
+      MODULE_NAME="${MODULE_PATH#go.eneba.engineering/}"
+      GITLAB_URL="ssh://git@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+      S3_PATH="s3://go.eneba.engineering/${MODULE_NAME}"
+      EXPECTED_HTML="<meta name=\"go-import\" content=\"${MODULE_PATH} git ${GITLAB_URL}\">"
+
+      echo "Module: ${MODULE_PATH}"
+      echo "S3 target: ${S3_PATH}"
+      echo "HTML content: ${EXPECTED_HTML}"
+
+      if aws s3 cp "${S3_PATH}" /tmp/existing.html --region eu-west-1 2>/dev/null; then
+        if [ "$(cat /tmp/existing.html)" = "$EXPECTED_HTML" ]; then
+          echo "Already up-to-date, skipping upload"
+          exit 0
+        fi
+        echo "Content differs, updating..."
+      else
+        echo "Not found in S3, uploading..."
+      fi
+
+      echo "$EXPECTED_HTML" > /tmp/index.html
+
+      aws s3 cp /tmp/index.html "${S3_PATH}" \
+        --region eu-west-1 \
+        --content-type "text/html; charset=utf-8"
+
+      echo "Vanity import published: ${MODULE_PATH}"
+  rules:
+    - if: $CI_COMMIT_TAG && "$[[ inputs.vanity-import ]]" == "true" && "$[[ inputs.root-dir ]]" != "."
+      exists: ["$[[ inputs.root-dir ]]/go.mod"]
+    - if: $CI_COMMIT_TAG && "$[[ inputs.vanity-import ]]" == "true" && "$[[ inputs.root-dir ]]" == "."
+      exists: ["go.mod"]

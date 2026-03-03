@@ -1,0 +1,5 @@
+# Mock stub for renovate component (not needed locally)
+spec:
+  inputs:
+    rules:
+      default: []

@@ -1,0 +1,49 @@
+package handler
+
+import (
+	"errors"
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"{{.ModuleName}}/internal/log"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestPing_Success(t *testing.T) {
+	pinger := new(mockDbPinger)
+	pinger.On("Ping").Return(nil)
+
+	handler := Ping(pinger, log.TestLogger())
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+	bodyBytes, err := ioutil.ReadAll(w.Result().Body)
+	require.NoError(t, err)
+	assert.Equal(t, "PONG", string(bodyBytes))
+	pinger.AssertExpectations(t)
+}
+
+func TestPing_Fails(t *testing.T) {
+	pinger := new(mockDbPinger)
+	pinger.On("Ping").Return(errors.New("failed"))
+
+	handler := Ping(pinger, log.TestLogger())
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+
+	handler(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Result().StatusCode)
+	bodyBytes, err := ioutil.ReadAll(w.Result().Body)
+	require.NoError(t, err)
+	assert.Equal(t, "DB connection ping failed", string(bodyBytes))
+	pinger.AssertExpectations(t)
+}

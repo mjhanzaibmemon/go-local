@@ -1,0 +1,5 @@
+validation:
+    required: '"{{.Field}}" has to be filled in'
+    uuid: '"{{.Field}}" is not a valid format'
+    email: '"{{.Value}}" is not a valid email'
+    some_custom_validation_tag: 'Some error message'

@@ -1,0 +1,59 @@
+package handler
+
+import (
+	"context"
+	"fmt"
+
+	"{{.ModuleName}}/internal/temporal/command"
+	"bitbucket.org/csgot/helis-messagebus-go/v2/pkg/messagebus"
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper/processor"
+	"github.com/sirupsen/logrus"
+)
+
+// TODO: normally, there is no need to suffix everything with "temporal".
+//   Here it is done because it would collide with other generated applications.
+
+type (
+	temporalStorage interface {
+		Ping() error
+	}
+
+	temporalSettingsRouter interface {
+		GetBool(settingName string, defaultVal bool) bool
+	}
+
+	TemporalGreetingCommandHandler struct {
+		processor.SingleTypeActivity
+		storage        temporalStorage
+		settingsRouter temporalSettingsRouter
+		logger         *logrus.Logger
+	}
+
+	TemporalGreetingCommandHandlerConfig struct {
+		Storage        temporalStorage
+		SettingsRouter temporalSettingsRouter
+		Logger         *logrus.Logger
+	}
+)
+
+func NewTemporalGreeting(c *TemporalGreetingCommandHandlerConfig) *TemporalGreetingCommandHandler {
+	return &TemporalGreetingCommandHandler{
+		SingleTypeActivity: processor.SingleTypeActivity{
+			Type: command.TemporalGreetingCommandType,
+		},
+		storage:        c.Storage,
+		settingsRouter: c.SettingsRouter,
+		logger:         c.Logger,
+	}
+}
+
+func (h *TemporalGreetingCommandHandler) Handle(ctx context.Context, msg *messagebus.Message) (interface{}, error) {
+	greetingCommand, ok := msg.Envelope.(*command.TemporalGreetingCommand)
+	if !ok {
+		return nil, fmt.Errorf("unable to cast envelope into %s struct", h.MessageType())
+	}
+
+	h.logger.WithContext(ctx).Info(greetingCommand.Message)
+
+	return nil, nil
+}

@@ -1,0 +1,168 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+
+	internalconfig "{{.ModuleName}}/internal/config"
+	"{{.ModuleName}}/internal/contextkey"
+	"{{.ModuleName}}/internal/log"
+	config "bitbucket.org/csgot/helis-config-go"
+	"bitbucket.org/csgot/helis-elasticlogrus/hook"
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper/logrushook"
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper/transport"
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper/workflow"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+	"go.temporal.io/sdk/client"
+)
+
+func createDevTemporalActivityTriggerCmd() *cobra.Command {
+	var temporalActivityPayloadFile, temporalHeadersPayloadFile string
+
+	cmd := &cobra.Command{
+		Use:   "trigger-temporal-activity",
+		Short: "Triggers temporal activity. Should be used only on local environment for testing purpose.",
+		Run: func(cmd *cobra.Command, args []string) {
+			defer log.RecoverFromPanic()
+
+			cfg := &internalconfig.TemporalWorkerCmd{}
+			if err := config.Parse(cfg, ".env.temporal-worker"); err != nil {
+				panic(fmt.Errorf("failed to parse config: %w", err))
+			}
+
+			logger := newLogger(
+				cfg.LogLevel,
+				cfg.SensitiveFields,
+				hook.NewCorrelationID(contextkey.CID, hook.DefaultCIDFieldName),
+				logrushook.NewTemporal(),
+			)
+
+			temporalClient := newTemporalClient(".env.temporal-worker", logger)
+
+			defer temporalClient.Close()
+
+			workflowOptions := client.StartWorkflowOptions{
+				TaskQueue: cfg.TemporalQueueName,
+			}
+
+			activityPayload, err := parseTemporalActivityPayload(temporalActivityPayloadFile)
+			if err != nil {
+				logger.WithError(err).Fatal("failed to parse activity payload")
+			}
+
+			activityHeaders, err := parseTemporalActivityHeaders(temporalHeadersPayloadFile)
+			if err != nil {
+				logger.WithError(err).Fatal("failed to parse activity headers payload")
+			}
+
+			ctx := context.Background()
+
+			cid := getTemporalCID(activityHeaders)
+			if cid != "" {
+				ctx = context.WithValue(ctx, contextkey.CID, cid)
+			}
+
+			we, err := temporalClient.ExecuteWorkflow(
+				ctx,
+				workflowOptions,
+				workflow.ActivityTrigger,
+				*activityPayload,
+				*activityHeaders,
+			)
+
+			if err != nil {
+				logger.WithError(err).Fatal("Unable to execute workflow")
+			}
+
+			logger.
+				WithFields(logrus.Fields{
+					"WorkflowID": we.GetID(),
+					"RunID":      we.GetRunID(),
+				}).
+				Info("Started workflow")
+		},
+	}
+
+	cmd.Flags().StringVar(
+		&temporalActivityPayloadFile,
+		"activity-payload",
+		"",
+		"Temporal activity payload. JSON or path to file, e.g. file:///some/path/file.json",
+	)
+
+	cmd.Flags().StringVar(
+		&temporalHeadersPayloadFile,
+		"headers-payload",
+		"",
+		"Temporal headers payload. JSON or path to file, e.g. file:///some/path/file.json",
+	)
+
+	_ = cmd.MarkFlagRequired("activity-payload")
+	_ = cmd.MarkFlagRequired("headers-payload")
+
+	return cmd
+}
+
+func parseTemporalActivityPayload(payloadFile string) (*transport.DataWrapper, error) {
+	payloadBytes, err := parseTemporalPayloadInput(payloadFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse payloadFile input: %w", err)
+	}
+
+	dw := &transport.DataWrapper{}
+
+	err = json.Unmarshal(payloadBytes, dw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal activity payloadFile: %w", err)
+	}
+
+	return dw, nil
+}
+
+func parseTemporalActivityHeaders(payload string) (*transport.HeaderContainer, error) {
+	payloadBytes, err := parseTemporalPayloadInput(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse payload input: %w", err)
+	}
+
+	headers := make(map[string]interface{})
+
+	err = json.Unmarshal(payloadBytes, &headers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal activity payload: %w", err)
+	}
+
+	return &transport.HeaderContainer{
+		Headers: headers,
+	}, nil
+}
+
+func parseTemporalPayloadInput(payload string) ([]byte, error) {
+	var payloadBytes []byte
+
+	if strings.HasPrefix(payload, "file://") {
+		var err error
+
+		path := strings.TrimPrefix(payload, "file://")
+
+		payloadBytes, err = os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read payload file %s: %w", path, err)
+		}
+	}
+
+	return payloadBytes, nil
+}
+
+func getTemporalCID(headerContainer *transport.HeaderContainer) string {
+	cidI, ok := headerContainer.Headers["cid"]
+	if !ok {
+		return ""
+	}
+
+	return cidI.(string)
+}

@@ -1,0 +1,21 @@
+package gql
+
+import (
+    "{{.ModuleName}}/internal/gql/types"
+	"github.com/graphql-go/graphql"
+)
+
+func rootQuery(gqlResolver *Resolver) *graphql.Object {
+	fields := graphql.Fields{
+		QueryGreeting: &graphql.Field{
+			Type:    types.Greeting,
+			Args:    argsWithDefaults(nil),
+			Resolve: gqlResolver.Greeting,
+		},
+	}
+
+	return graphql.NewObject(graphql.ObjectConfig{
+		Name:   "RootQuery",
+		Fields: fields,
+	})
+}

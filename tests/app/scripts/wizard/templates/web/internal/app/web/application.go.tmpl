@@ -1,0 +1,91 @@
+package web
+
+import (
+	"context"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"bitbucket.org/csgot/helis-market-settings-client-go/pkg/stn"
+	"github.com/graphql-go/graphql"
+	"github.com/opentracing/opentracing-go"
+	"github.com/sirupsen/logrus"
+)
+
+type (
+	storage interface {
+		Ping() error
+	}
+
+	translator interface {
+		Trans(locale, id string, params interface{}) string
+		TransErr(locale string, err error) (string, bool)
+	}
+
+	Config struct {
+		Storage        storage
+		GQLSchema      *graphql.Schema
+		SettingsRouter *stn.Router
+		ServerAddress  string
+		Translator     translator
+		Logger         *logrus.Logger
+		HTTPTracer     opentracing.Tracer
+	}
+
+	Application struct {
+		translator translator
+		httpServer *http.Server
+		logger     *logrus.Logger
+	}
+)
+
+func NewApplication(c *Config) *Application {
+	router := initRouter(&routerConfig{
+		gqlSchema:      c.GQLSchema,
+		storage:        c.Storage,
+		logger:         c.Logger,
+		httpTracer:     c.HTTPTracer,
+		settingsRouter: c.SettingsRouter,
+	})
+
+	return &Application{
+		translator: c.Translator,
+		logger:     c.Logger,
+		httpServer: &http.Server{Addr: c.ServerAddress, Handler: router, ReadHeaderTimeout: time.Minute},
+	}
+}
+
+func (a *Application) Run() {
+	idleConnsClosed := make(chan struct{})
+
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+
+		a.logger.Info("Signal received to stop web application. Shutting down web server")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := a.httpServer.Shutdown(ctx); err != nil {
+			a.logger.WithError(err).Fatal("Error while shutting down a server")
+		}
+
+		close(idleConnsClosed)
+	}()
+
+	a.logger.Info("web application started")
+
+	// http.ErrServerClosed is returned on a Shutdown() call therefore it
+	// is not being logged as error as this is expected behavior
+	if err := a.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		a.logger.WithError(err).Fatal("Error on ListenAndServe")
+	}
+
+	<-idleConnsClosed
+
+	a.logger.Info("web application stopped properly")
+}

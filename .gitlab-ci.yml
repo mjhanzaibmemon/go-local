@@ -1,0 +1,30 @@
+include:
+  - component: gitlab.com/d5100/services/platform/gitlab-components/semantic-release/semantic-release@1
+  - component: gitlab.com/d5100/services/platform/gitlab-components/generic/workflow@1
+  - component: gitlab.com/d5100/services/platform/gitlab-components/generic/linter@1
+  - component: gitlab.com/d5100/services/platform/gitlab-components/generic/logger@1
+  - component: gitlab.com/d5100/services/platform/gitlab-components/renovate/renovate@1
+  - local: $CI_PROJECT_DIR/tests/.gitlab-ci.yml
+
+# Used in tests to verify that expected jobs were created
+.check:jobs:
+  stage: test
+  image: 533267242017.dkr.ecr.eu-west-1.amazonaws.com/cache/docker-hub/badouralix/curl-jq
+  cache: []
+  needs: []
+  dependencies: []
+  variables:
+    GIT_STRATEGY: none
+    KUBERNETES_CPU_REQUEST: 10m
+    KUBERNETES_MEMORY_REQUEST: 100M
+    KUBERNETES_NODE_SELECTOR_ARCH: "kubernetes.io/arch=arm64"
+    PIPELINE_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/pipelines/${CI_PIPELINE_ID}/jobs?per_page=100&page=1"
+  script:
+    - |
+      COUNT=`curl -s --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "${PIPELINE_URL}" | jq "map(select(.name | contains(\"${JOB_NAME}\"))) | length"`
+      if [ "${COUNT}" != "2" ]; then
+        echo -e "${LOG_ERROR} Component ${JOB_NAME} missing"
+        exit 1
+      else
+        echo -e "${LOG_SUCCESS} Component ${JOB_NAME} present"
+      fi

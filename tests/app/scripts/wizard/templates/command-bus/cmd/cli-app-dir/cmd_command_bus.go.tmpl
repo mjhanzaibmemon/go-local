@@ -1,0 +1,214 @@
+//nolint:dupl
+package main
+
+import (
+	"context"
+	"fmt"
+
+	config "bitbucket.org/csgot/helis-config-go"
+	"bitbucket.org/csgot/helis-elasticlogrus/hook"
+	enq2buspublic "bitbucket.org/csgot/helis-enq2bus-go/pkg/enq2bus"
+	enq2busextension "bitbucket.org/csgot/helis-enq2bus-go/pkg/enq2bus/extension"
+	"bitbucket.org/csgot/helis-enq2bus-go/pkg/enq2bus/processor"
+	processormetrics "bitbucket.org/csgot/helis-enq2bus-go/pkg/enq2bus/processor/metrics"
+	"bitbucket.org/csgot/helis-enq2bus-go/pkg/enq2bus/publisher"
+	"bitbucket.org/csgot/helis-enqueue-go/pkg/enqueue"
+	"bitbucket.org/csgot/helis-enqueue-go/pkg/enqueue/sqs"
+	sqsmetrics "bitbucket.org/csgot/helis-enqueue-go/pkg/enqueue/sqs/metrics"
+	"bitbucket.org/csgot/helis-messagebus-go/v2/pkg/messagebus"
+	opentracingextension "bitbucket.org/csgot/helis-opentracing-enqueue-go/pkg/opentracingenqueue/extension"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	awssqs "github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/spf13/cobra"
+	internalconfig "{{.ModuleName}}/internal/config"
+	"{{.ModuleName}}/internal/contextkey"
+	"{{.ModuleName}}/internal/db"
+	internalenqueue "{{.ModuleName}}/internal/enqueue"
+	internalhttp "{{.ModuleName}}/internal/http"
+	"{{.ModuleName}}/internal/log"
+	internalmessagebus "{{.ModuleName}}/internal/messagebus"
+	"{{.ModuleName}}/internal/messagebus/command"
+	commandhandler "{{.ModuleName}}/internal/messagebus/command/handler"
+	"{{.ModuleName}}/internal/metrics"
+	"{{.ModuleName}}/internal/signal"
+	"{{.ModuleName}}/internal/storage"
+	"gorm.io/gorm"
+)
+
+//nolint:funlen
+func createCommandBusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "command-bus",
+		Short: "command-bus consumes SQS messages from command-bus queue",
+		Run: func(cmd *cobra.Command, args []string) {
+			defer log.RecoverFromPanic()
+
+			cfg := &internalconfig.CommandBusCmd{}
+			if err := config.Parse(cfg, ".env.command-bus"); err != nil {
+				panic(fmt.Errorf("failed to parse config: %w", err))
+			}
+
+			prepareVFSForServiceAccount(cfg.AWSEndpoint, cfg.AWSRegion)
+
+			logger := newLogger(
+				cfg.LogLevel,
+				cfg.SensitiveFields,
+				hook.NewCorrelationID(contextkey.CID, hook.DefaultCIDFieldName),
+				enqueue.NewLogrusHook(enqueue.FieldsMap{
+					"header_correlation_id": hook.DefaultCIDFieldName,
+				}),
+			)
+
+			tracer, tracerCloser := newNonSamplingTracer(cfg.TracerServiceName, logger)
+
+			defer func() {
+				_ = tracerCloser.Close()
+			}()
+
+			dsn := db.NewDSN(
+				&db.ConnectionArgs{
+					Username: cfg.DatabaseUsername,
+					Password: cfg.DatabasePassword,
+					Endpoint: cfg.DatabaseEndpoint,
+					Port:     cfg.DatabasePort,
+				},
+				cfg.DatabaseName,
+			)
+
+			dbConnection := newDBConnection(dsn.String(), []gorm.Plugin{db.NewGORMOpentracingPlugin(tracer)}, logger)
+
+			appStorage := storage.NewMySQL(&storage.MySQLStorageConfig{
+				DB: dbConnection,
+			})
+
+			awsSQSCfg := aws.NewConfig().WithEndpoint(cfg.AWSEndpoint).WithRegion(cfg.AWSRegion)
+			sqsClient := awssqs.New(session.Must(session.NewSession(awsSQSCfg)))
+
+			enqueueContext := sqs.NewContext(&sqs.Config{
+				SQSClient:           sqsClient,
+				QueueURL:            cfg.SQSQueueURL,
+				VisibilityTimeout:   internalenqueue.SQSVisibilityTimeout,
+				MaxNumberOfMessages: internalenqueue.SQSMaxNumberOfMessages,
+				MetricsRecorder:     sqsmetrics.NewSQSAPIRecorder(),
+				Logger:              logger,
+			})
+
+			marketplaceClient := internalhttp.NewDefaultMarketplaceClient(tracer)
+
+			settingsRouter := newSettingsRouter(cfg.SettingsServiceURI, marketplaceClient, logger)
+
+			commandBusHandlerResolver, err := messagebus.NewDefaultHandlerResolver([]messagebus.MessageHandler{
+				commandhandler.NewGreeting(&commandhandler.GreetingCommandHandlerConfig{
+					Storage:        appStorage,
+					SettingsRouter: settingsRouter,
+					Logger:         logger,
+				}),
+			})
+			if err != nil {
+				logger.WithError(err).Fatal("failed to create command bus handler resolver")
+			}
+
+			standardValidator := internalmessagebus.NewValidator(newValidator(logger))
+			messageEncoder := enq2buspublic.NewMessageEncoder(internalmessagebus.NewCommandBusEnvelopeWrapper())
+			commandBus := messagebus.New(&messagebus.Config{
+				Validator:       standardValidator,
+				HandlerResolver: commandBusHandlerResolver,
+			})
+
+			messageBusProcessor := processor.NewMessageBusProcessor(&processor.MessageBusProcessorConfig{
+				MessageDecoder: messageEncoder,
+				MessageBus:     commandBus,
+				ErrorHandler: processor.NewDefaultErrorHandler(&processor.DefaultErrorHandlerConfig{
+					MaxRequeueAttempts: 3,
+				}),
+			})
+
+			largeMsgLocation := newLargeMessageLocation(cfg.SQSLargeMessageLocationURI, logger)
+
+			largeMsgExtension := enq2busextension.NewLargeMessage(&enq2busextension.LargeMessageExtensionConfig{
+				FSLocation: largeMsgLocation,
+			})
+
+			tracerExtension := opentracingextension.NewTracerExtension(&opentracingextension.TracerExtensionConfig{
+				Tracer: tracer,
+			})
+
+			cidExtension := enq2busextension.NewCID(contextkey.CID)
+
+			enqueuePublisher := publisher.New(&publisher.Config{
+				Encoder: messageEncoder,
+				Context: enqueueContext,
+				Extension: publisher.NewChainExtension([]publisher.Extension{
+					tracerExtension,
+					cidExtension,
+					enq2busextension.NewLocale(),
+					largeMsgExtension,
+				}),
+			})
+
+			redisAdapter := newRedisCacheAdapter(cfg.CacheRedisDSN, cfg.CacheRedisNamespace, logger)
+
+			trans := newTranslator(logger)
+
+			listenerExtension := enqueue.NewChainExtension([]enqueue.Extension{
+				enq2busextension.NewContextCancellation(),
+				tracerExtension,
+				largeMsgExtension,
+				enq2busextension.NewBodyContainingHeaders(),
+				// cid extension should go after headers are parsed
+				cidExtension,
+				// messageID based deduplication
+				enq2busextension.NewDeduplication(&enq2busextension.DeduplicationExtensionConfig{
+					CacheKeyBuilder: enq2busextension.PrefixedCacheKey(
+						enq2busextension.DeduplPrefixMsgID,
+						enq2busextension.MsgIDCacheKeyBuilder,
+					),
+					Cache: redisAdapter,
+					TTL:   internalenqueue.DeduplicationTTL,
+				}),
+				// message body based deduplication
+				enq2busextension.NewDeduplication(&enq2busextension.DeduplicationExtensionConfig{
+					ConditionChecker: internalenqueue.BodyBasedDeduplicationConditionChecker,
+					CacheKeyBuilder: enq2busextension.PrefixedCacheKey(
+						enq2busextension.DeduplPrefixBody,
+						enq2busextension.HashedBodyCacheKeyBuilder,
+					),
+					Cache: redisAdapter,
+					TTL:   internalenqueue.DeduplicationTTL,
+				}),
+				enq2busextension.NewTransaction(&enq2busextension.TransactionExtensionConfig{
+					Publisher:  enqueuePublisher,
+					Translator: trans,
+				}),
+				// this extension supposed to be very last always
+				enq2busextension.NewMonitoring(&enq2busextension.MonitoringExtensionConfig{
+					MessageDecoder: messageEncoder,
+					MetricsRecorder: processormetrics.NewMessageBusProcessorRecorderWithConfig(&processormetrics.MessageBusProcessorRecorderConfig{
+						Namespace: "go",
+						MessageTypesToInit: []string{
+							command.GreetingCommandType,
+						},
+					}),
+				}),
+			})
+
+			listener := enqueue.NewListener(&enqueue.ListenerConfig{
+				Context:     enqueueContext,
+				Processor:   messageBusProcessor,
+				Extension:   listenerExtension,
+				Concurrency: cfg.ListenerConcurrency,
+				WaitTimeout: cfg.MessageWaitTimeout,
+				Logger:      logger,
+			})
+
+			ctx, cancel := context.WithCancel(context.Background())
+
+			go signal.Handler(cancel)
+			go metrics.Endpoint(":" + cfg.MetricsHTTPPort)
+			go internalhttp.PingServerFn(":"+cfg.PingHTTPPort, logger, appStorage)
+
+			listener.Listen(ctx)
+		},
+	}
+}

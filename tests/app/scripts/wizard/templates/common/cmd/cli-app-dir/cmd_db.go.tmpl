@@ -1,0 +1,54 @@
+package main
+
+import (
+	config "bitbucket.org/csgot/helis-config-go"
+	"fmt"
+
+    "{{.ModuleName}}/internal/db"
+
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+)
+
+const (
+	migrationsSource = "file://migrations"
+)
+
+type (
+	DatabaseCmd struct {
+		DatabaseUsername string `koanf:"DATABASE_USERNAME" required:"true"`
+		DatabasePassword string `koanf:"DATABASE_PASSWORD" required:"true"`
+		DatabaseEndpoint string `koanf:"DATABASE_ENDPOINT" required:"true"`
+		DatabasePort     string `koanf:"DATABASE_PORT"     required:"true"`
+		DatabaseName     string `koanf:"DATABASE_NAME"     required:"true"`
+	}
+)
+
+func createDBCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "db",
+		Short: "Commands for working with database",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println("Run `{{.ServiceName}} db --help` for more information.")
+		},
+	}
+
+	return cmd
+}
+
+func getDSNFromEnv() *db.DSN {
+	cfg := &DatabaseCmd{}
+	if err := config.Parse(cfg, ".env.db"); err != nil {
+		panic(fmt.Errorf("failed to parse config: %w", err))
+	}
+
+	return db.NewDSN(
+		&db.ConnectionArgs{
+			Username: cfg.DatabaseUsername,
+			Password: cfg.DatabasePassword,
+			Endpoint: cfg.DatabaseEndpoint,
+			Port:     cfg.DatabasePort,
+		},
+		cfg.DatabaseName,
+	)
+}

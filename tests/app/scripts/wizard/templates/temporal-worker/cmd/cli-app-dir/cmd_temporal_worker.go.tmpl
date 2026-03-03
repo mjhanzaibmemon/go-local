@@ -1,0 +1,129 @@
+package main
+
+import (
+	"fmt"
+	"time"
+
+	internalconfig "{{.ModuleName}}/internal/config"
+	"{{.ModuleName}}/internal/contextkey"
+	"{{.ModuleName}}/internal/db"
+	internalhttp "{{.ModuleName}}/internal/http"
+	"{{.ModuleName}}/internal/log"
+	internalmessagebus "{{.ModuleName}}/internal/messagebus"
+	commandhandler "{{.ModuleName}}/internal/temporal/command/handler"
+	"{{.ModuleName}}/internal/storage"
+	"{{.ModuleName}}/internal/temporal"
+	config "bitbucket.org/csgot/helis-config-go"
+	"bitbucket.org/csgot/helis-elasticlogrus/hook"
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper"
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper/logrushook"
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper/processor"
+	"bitbucket.org/csgot/mp-platform-lib-temporalwrapper-go/v3/pkg/temporalwrapper/workflow"
+	"github.com/spf13/cobra"
+	"go.temporal.io/sdk/worker"
+	"gorm.io/gorm"
+)
+
+func createTemporalWorkerCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "temporal",
+		Short: "Starts Temporal worker",
+		Run: func(cmd *cobra.Command, args []string) {
+			defer log.RecoverFromPanic()
+
+			cfg := &internalconfig.TemporalWorkerCmd{}
+			if err := config.Parse(cfg, ".env.temporal-worker"); err != nil {
+				panic(fmt.Errorf("failed to parse config: %w", err))
+			}
+
+			prepareVFSForServiceAccount(cfg.AWSEndpoint, cfg.AWSRegion)
+
+			logger := newLogger(
+				cfg.LogLevel,
+				cfg.SensitiveFields,
+				hook.NewCorrelationID(contextkey.CID, hook.DefaultCIDFieldName),
+				logrushook.NewTemporal(),
+			)
+
+			tracer, tracerCloser := newNonSamplingTracer(cfg.TracerServiceName, logger)
+
+			defer func() {
+				_ = tracerCloser.Close()
+			}()
+
+			dsn := db.NewDSN(
+				&db.ConnectionArgs{
+					Username: cfg.DatabaseUsername,
+					Password: cfg.DatabasePassword,
+					Endpoint: cfg.DatabaseEndpoint,
+					Port:     cfg.DatabasePort,
+				},
+				cfg.DatabaseName,
+			)
+
+			dbConnection := newDBConnection(dsn.String(), []gorm.Plugin{db.NewGORMOpentracingPlugin(tracer)}, logger)
+
+			appStorage := storage.NewMySQL(&storage.MySQLStorageConfig{
+				DB: dbConnection,
+			})
+
+			temporalClient := newTemporalClient(".env.temporal-worker", logger)
+
+			standardValidator := internalmessagebus.NewValidator(newValidator(logger))
+			marketplaceClient := internalhttp.NewDefaultMarketplaceClient(tracer)
+			settingsRouter := newSettingsRouter(cfg.SettingsServiceURI, marketplaceClient, logger)
+
+			activities := []processor.Activity{
+				commandhandler.NewTemporalGreeting(&commandhandler.TemporalGreetingCommandHandlerConfig{
+					Storage:        appStorage,
+					SettingsRouter: settingsRouter,
+					Logger:         logger,
+				}),
+			}
+
+			redisAdapter := newRedisCacheAdapter(cfg.CacheRedisDSN, cfg.CacheRedisNamespace, logger)
+
+			trans := newTranslator(logger)
+
+			extensions, err := temporal.Extensions(redisAdapter, trans, tracer, logger)
+			if err != nil {
+				logger.WithError(err).Fatal("failed to initialize temporal extensions")
+			}
+
+			internalWorkflows := []interface{}{}
+
+			if cfg.AppDevMode {
+				internalWorkflows = append(internalWorkflows, workflow.ActivityTrigger)
+			}
+
+			runner, err := temporalwrapper.NewRunner(
+				temporalwrapper.RunnerOptions{
+					TemporalClient:    temporalClient,
+					TemporalQueueName: cfg.TemporalQueueName,
+					WorkerOptions: worker.Options{
+						WorkerStopTimeout: 15 * time.Second,
+					},
+					Logger:            logger,
+					Activities:        activities,
+					Processor: processor.NewActivityProcessor(
+						processor.NewChainExtension(extensions),
+						standardValidator,
+					),
+					InternalWorkflows: internalWorkflows,
+				},
+			)
+			if err != nil {
+				logger.WithError(err).Fatal("unable to create handlers as temporal activities runner")
+			}
+
+			go internalhttp.PingServerFn(":"+cfg.PingHTTPPort, logger, appStorage)
+
+			defer runner.Close()
+
+			err = runner.Run()
+			if err != nil {
+				logger.WithError(err).Fatal("temporal activity runner has failed")
+			}
+		},
+	}
+}
