@@ -46,30 +46,57 @@ stages:
 # ---------------------------------------------------------------
 # GO LINT
 # Uses golangci-lint Docker image directly (no private deps needed)
-# IMPORTANT: We use --no-config and only enable syntax-level linters
-# that do NOT require package loading (private bitbucket deps).
-# The full linter set runs on GitLab CI where deps are available.
+# golangci-lint v2 ALWAYS loads Go packages (goanalysis_metalinter),
+# which fails without private bitbucket.org/csgot credentials.
+# Instead, we run individual lint tools directly — no package loading.
+# The full golangci-lint suite runs on GitLab CI where deps are available.
 # ---------------------------------------------------------------
 Go Lint:
   stage: lint
-  image: golangci/golangci-lint:v2.1.6
+  image: golang:1.24
   variables:
     GIT_STRATEGY: clone
   script:
     - cd tests/app
-    - mkdir -p reports
+    - echo "=== Running gofmt ==="
     - |
-      set +e
-      golangci-lint run \
-        -c .golangci-local.yml \
-        --output.text.print-issued-lines=true \
-        --output.text.path=stdout
-      status=$?
-      exit $status
-  artifacts:
-    paths:
-      - tests/app/reports/code-quality-report.json
-    when: always
+      GOFMT_OUTPUT=$(gofmt -l -s $(find . -name '*.go' -not -path './vendor/*' -not -path './migrations/*' -not -path './test/*' -not -path './scripts/*'))
+      if [ -n "$GOFMT_OUTPUT" ]; then
+        echo "ERROR: The following files need formatting:"
+        echo "$GOFMT_OUTPUT"
+        FAIL=1
+      else
+        echo "PASS: All files properly formatted"
+      fi
+    - echo "=== Running go vet (syntax only, no deps) ==="
+    - echo "Skipped — requires private deps"
+    - echo "=== Installing misspell ==="
+    - go install github.com/client9/misspell/cmd/misspell@latest
+    - echo "=== Running misspell ==="
+    - |
+      MISSPELL_OUTPUT=$(find . -name '*.go' -not -path './vendor/*' | xargs misspell)
+      if [ -n "$MISSPELL_OUTPUT" ]; then
+        echo "WARNING: Possible misspellings found:"
+        echo "$MISSPELL_OUTPUT"
+      else
+        echo "PASS: No misspellings found"
+      fi
+    - echo "=== Checking line length (max 140 chars) ==="
+    - |
+      LONG_LINES=$(find . -name '*.go' -not -path './vendor/*' -not -path './migrations/*' -not -path './test/*' -not -path './scripts/*' -exec awk -v file={} 'length > 140 {printf "%s:%d: line too long (%d chars)\n", file, NR, length}' {} \;)
+      if [ -n "$LONG_LINES" ]; then
+        echo "WARNING: Lines exceeding 140 characters:"
+        echo "$LONG_LINES"
+      else
+        echo "PASS: All lines within 140 characters"
+      fi
+    - echo "=== Local lint checks complete ==="
+    - |
+      if [ "${FAIL:-0}" = "1" ]; then
+        echo "FAILED: Some checks did not pass"
+        exit 1
+      fi
+      echo "ALL CHECKS PASSED"
   rules:
     - when: always
 
