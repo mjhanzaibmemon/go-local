@@ -62,25 +62,7 @@ Go Lint:
     - |
       set +e
       golangci-lint run \
-        --no-config \
-        --timeout=10m \
-        --disable-all \
-        --enable=gofmt \
-        --enable=goimports \
-        --enable=misspell \
-        --enable=lll \
-        --enable=whitespace \
-        --enable=dogsled \
-        --enable=dupl \
-        --enable=nakedret \
-        --enable=gocyclo \
-        --enable=gocognit \
-        --enable=funlen \
-        --enable=nestif \
-        --enable=asciicheck \
-        --enable=prealloc \
-        --enable=goprintffuncname \
-        --enable=wsl \
+        -c .golangci-local.yml \
         --output.text.print-issued-lines=true \
         --output.text.path=stdout
       status=$?

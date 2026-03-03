@@ -1,0 +1,48 @@
+version: "2"
+
+# ============================================================
+# LOCAL-ONLY golangci-lint config
+# Used by .gitlab-ci-local.yml for local CI testing.
+# Only syntax-level linters that do NOT require package loading
+# (no private bitbucket.org/csgot dependencies needed).
+# The full linter set (.golangci.yml) runs on GitLab CI.
+# ============================================================
+
+linters:
+    disable-all: true
+    enable:
+        - gofmt
+        - goimports
+        - misspell
+        - lll
+        - whitespace
+        - dogsled
+        - dupl
+        - nakedret
+        - gocyclo
+        - gocognit
+        - funlen
+        - nestif
+        - asciicheck
+        - prealloc
+        - goprintffuncname
+        - wsl
+
+linters-settings:
+    lll:
+        line-length: 140
+    funlen:
+        lines: 100
+        statements: 50
+    gocyclo:
+        min-complexity: 15
+
+run:
+    timeout: 10m
+    skip-dirs:
+        - bin
+        - docs
+        - migrations
+        - test
+        - translations
+        - scripts
