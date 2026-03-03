@@ -60,7 +60,7 @@ Go Lint:
     - |
       set +e
       golangci-lint run \
-        --timeout=3m \
+        --timeout=10m \
         --output.text.print-issued-lines=true \
         --output.code-climate.path=code-quality-report.json \
         --output.text.path=stdout
