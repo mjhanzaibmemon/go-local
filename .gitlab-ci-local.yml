@@ -47,7 +47,9 @@ stages:
 # ---------------------------------------------------------------
 # GO LINT
 # Uses golangci-lint Docker image directly (no private deps needed)
-# This job WILL PASS locally without any credentials.
+# IMPORTANT: We use --no-config and only enable syntax-level linters
+# that do NOT require package loading (private bitbucket deps).
+# The full linter set runs on GitLab CI where deps are available.
 # ---------------------------------------------------------------
 Go Lint:
   stage: lint
@@ -60,12 +62,28 @@ Go Lint:
     - |
       set +e
       golangci-lint run \
+        --no-config \
         --timeout=10m \
+        --disable-all \
+        --enable=gofmt \
+        --enable=goimports \
+        --enable=misspell \
+        --enable=lll \
+        --enable=whitespace \
+        --enable=dogsled \
+        --enable=dupl \
+        --enable=nakedret \
+        --enable=gocyclo \
+        --enable=gocognit \
+        --enable=funlen \
+        --enable=nestif \
+        --enable=asciicheck \
+        --enable=prealloc \
+        --enable=goprintffuncname \
+        --enable=wsl \
         --output.text.print-issued-lines=true \
-        --output.code-climate.path=code-quality-report.json \
         --output.text.path=stdout
       status=$?
-      cp code-quality-report.json reports/ 2>/dev/null || true
       exit $status
   artifacts:
     paths:
