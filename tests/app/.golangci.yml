@@ -58,14 +58,12 @@ linters:
         - dogsled
         - dupl
         - errcheck
-        - exhaustive
         - funlen
         - gochecknoinits
         - goconst
         - gocritic
         - gocyclo
         - goprintffuncname
-        - gosec
         - govet
         - ineffassign
         - lll
@@ -75,14 +73,17 @@ linters:
         - staticcheck
         - unconvert
         - unparam
-        - unused
         - whitespace
         - asciicheck
         - gocognit
         - nestif
         - prealloc
-        - testpackage
         - wsl
+    # DISABLED (require full package loading with private deps):
+    # - exhaustive
+    # - gosec
+    # - unused
+    # - testpackage
 
 run:
     skip-dirs:
