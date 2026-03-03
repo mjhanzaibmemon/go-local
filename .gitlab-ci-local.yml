@@ -37,12 +37,11 @@ stages:
   interruptible: true
   variables:
     GIT_STRATEGY: clone
-    CI_PROJECT_DIR: "/builds/project"
-    docker-app-path: "/builds/project/tests/app"
+    docker-app-path: "tests/app"
   before_script:
     - apk add --no-cache git openssh-client curl bash
     - git config --global url."https://bitbucket.org/".insteadOf "ssh://git@bitbucket.org/"
-    - git config --global url."https://bitbucket.org/".insteadOf "git@bitbucket.org/"
+    - git config --global url."https://bitbucket.org/".insteadOf "git@bitbucket.org:"
 
 # ---------------------------------------------------------------
 # GO LINT

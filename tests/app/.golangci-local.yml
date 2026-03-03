@@ -8,11 +8,14 @@ version: "2"
 # The full linter set (.golangci.yml) runs on GitLab CI.
 # ============================================================
 
-linters:
-    disable-all: true
+formatters:
     enable:
         - gofmt
         - goimports
+
+linters:
+    disable-all: true
+    enable:
         - misspell
         - lll
         - whitespace
@@ -24,9 +27,7 @@ linters:
         - funlen
         - nestif
         - asciicheck
-        - prealloc
         - goprintffuncname
-        - wsl
 
 linters-settings:
     lll:
@@ -36,13 +37,8 @@ linters-settings:
         statements: 50
     gocyclo:
         min-complexity: 15
+    misspell:
+        locale: US
 
 run:
     timeout: 10m
-    skip-dirs:
-        - bin
-        - docs
-        - migrations
-        - test
-        - translations
-        - scripts
